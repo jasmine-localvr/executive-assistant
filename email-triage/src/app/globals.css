@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+:root {
+  /* Brand — Primary */
+  --tan: #D4BDA2;
+  --tan-light: #E8DCCF;
+  --tan-dark: #B8A08A;
+  --navy: #1A2744;
+  --gold: #C9A962;
+
+  /* Brand — Text */
+  --charcoal: #2D2D2D;
+  --dark-gray: #4A4A4A;
+  --medium-gray: #6B6B6B;
+  --light-gray: #9A9A9A;
+  --brand-gray: #636466;
+
+  /* Brand — Backgrounds */
+  --cream: #FAF9F7;
+  --white: #FFFFFF;
+  --border: #E5E0DA;
+
+  /* Brand — Status */
+  --success: #059669;
+  --warning: #D97706;
+  --error: #DC2626;
+  --info: #2563EB;
+
+  /* Map to Tailwind tokens */
+  --background: var(--cream);
+  --foreground: var(--charcoal);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Brand colors */
+  --color-tan: #D4BDA2;
+  --color-tan-light: #E8DCCF;
+  --color-tan-dark: #B8A08A;
+  --color-navy: #1A2744;
+  --color-gold: #C9A962;
+  --color-charcoal: #2D2D2D;
+  --color-cream: #FAF9F7;
+  --color-brand-border: #E5E0DA;
+  --color-brand-gray: #636466;
+  --color-dark-gray: #4A4A4A;
+  --color-medium-gray: #6B6B6B;
+  --color-light-gray: #9A9A9A;
+
+  /* Status colors */
+  --color-success: #059669;
+  --color-success-light: #ecfdf5;
+  --color-success-border: #a7f3d0;
+  --color-warning: #D97706;
+  --color-warning-light: #fffbeb;
+  --color-warning-border: #fde68a;
+  --color-error: #DC2626;
+  --color-error-light: #fef2f2;
+  --color-error-border: #fecaca;
+  --color-info: #2563EB;
+  --color-info-light: #eff6ff;
+  --color-info-border: #bfdbfe;
+
+  /* Fonts */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: 'Libre Baskerville', Georgia, serif;
+  --font-mono: Menlo, Monaco, monospace;
+}
+
+body {
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}

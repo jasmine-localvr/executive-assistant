@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/triage",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/ea/watch",
+      "schedule": "0 0 */6 * *"
+    }
+  ]
+}
