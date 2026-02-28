@@ -9,3 +9,4 @@
 
 # Supabase local
 supabase/.temp/
+.vercel
