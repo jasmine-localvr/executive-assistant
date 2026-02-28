@@ -22,4 +22,13 @@ export default {
     signIn: '/login',
     error: '/login',
   },
+  callbacks: {
+    // Expose custom JWT fields to the session so middleware can read them.
+    // This must stay edge-compatible (no Node.js APIs).
+    session({ session, token }) {
+      session.user.teamMemberId = token.teamMemberId as string;
+      session.user.slackConnected = !!token.slackUserId;
+      return session;
+    },
+  },
 } satisfies NextAuthConfig;
