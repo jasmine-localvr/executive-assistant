@@ -13,7 +13,8 @@ export default function PipelineControls({
   const { data: session } = useSession();
   const [running, setRunning] = useState(false);
   const [emailCount, setEmailCount] = useState(5);
-  const [dryRun, setDryRun] = useState(true);
+  const isDev = process.env.NODE_ENV === 'development';
+  const [dryRun, setDryRun] = useState(isDev);
 
   async function handleRun() {
     if (!session?.user?.teamMemberId) return;
@@ -62,15 +63,17 @@ export default function PipelineControls({
         </select>
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-dark-gray">
-        <input
-          type="checkbox"
-          checked={dryRun}
-          onChange={(e) => setDryRun(e.target.checked)}
-          className="rounded border-brand-border accent-tan"
-        />
-        Dry run (classify only)
-      </label>
+      {isDev && (
+        <label className="flex items-center gap-2 text-sm text-dark-gray">
+          <input
+            type="checkbox"
+            checked={dryRun}
+            onChange={(e) => setDryRun(e.target.checked)}
+            className="rounded border-brand-border accent-tan"
+          />
+          Dry run (classify only)
+        </label>
+      )}
     </div>
   );
 }
