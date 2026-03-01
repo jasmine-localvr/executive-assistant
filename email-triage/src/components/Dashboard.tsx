@@ -28,6 +28,19 @@ export default function Dashboard() {
     }
   }, [update]);
 
+  // Fetch the most recent completed run on mount
+  useEffect(() => {
+    if (!memberId) return;
+    fetch('/api/runs?limit=1')
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setLatestRun(data[0]);
+        }
+      })
+      .catch(console.error);
+  }, [memberId]);
+
   useEffect(() => {
     if (!memberId) return;
     const params = new URLSearchParams();
