@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/triage",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/watch-renewal",
+      "schedule": "0 13 * * *"
     }
   ]
 }

@@ -114,6 +114,51 @@ export async function fetchInboxEmails(
   return messages;
 }
 
+// ─── Gmail Push Notifications (Pub/Sub Watch) ───
+
+export async function setupUserWatch(
+  member: TeamMember,
+  topicName: string
+): Promise<{ historyId: string; expiration: string }> {
+  const auth = await getAuthedClient(member);
+  const gmail = google.gmail({ version: 'v1', auth });
+
+  const result = await gmail.users.watch({
+    userId: 'me',
+    requestBody: {
+      topicName,
+      labelIds: ['INBOX'],
+    },
+  });
+
+  return {
+    historyId: result.data.historyId!,
+    expiration: result.data.expiration!,
+  };
+}
+
+export async function setupUserWatchWithToken(
+  accessToken: string,
+  topicName: string
+): Promise<{ historyId: string; expiration: string }> {
+  const oauth2Client = createOAuth2Client();
+  oauth2Client.setCredentials({ access_token: accessToken });
+  const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+  const result = await gmail.users.watch({
+    userId: 'me',
+    requestBody: {
+      topicName,
+      labelIds: ['INBOX'],
+    },
+  });
+
+  return {
+    historyId: result.data.historyId!,
+    expiration: result.data.expiration!,
+  };
+}
+
 export async function fetchSentEmails(
   member: TeamMember,
   maxResults: number = 50

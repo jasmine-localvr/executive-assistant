@@ -16,13 +16,14 @@ import type { TeamMember, GmailMessage, ClassifiedEmail, ClassificationResult, P
 interface PipelineOptions {
   emailCount?: number;
   dryRun?: boolean;
+  skipDigest?: boolean;
 }
 
 export async function runTriagePipeline(
   teamMemberId: string,
   options: PipelineOptions = {}
 ): Promise<PipelineRunResult> {
-  const { emailCount = 20, dryRun = false } = options;
+  const { emailCount = 20, dryRun = false, skipDigest = false } = options;
 
   // ── Setup ──
   const { data: member, error: memberError } = await supabase
@@ -369,7 +370,9 @@ export async function runTriagePipeline(
       // ═══════════════════════════════════════════
       // PHASE 4: CONSOLIDATED SLACK DIGEST
       // ═══════════════════════════════════════════
-      if (member.slack_user_id) {
+      if (skipDigest) {
+        await log('info', 'digest', 'Skipping Slack digest (instant processing mode)');
+      } else if (member.slack_user_id) {
         const { data: allRunEmails } = await supabase
           .from('classified_emails')
           .select('*')

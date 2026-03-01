@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth';
 import { encrypt } from './encryption';
 import { createServerClient } from './supabase';
+import { setupUserWatchWithToken } from './gmail';
 import authConfig from './auth.config';
 
 // Full auth config with server-only callbacks (uses Node.js crypto via encrypt).
@@ -55,6 +56,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .upsert(upsertData, { onConflict: 'email' })
           .select('id, slack_user_id')
           .single();
+
+        // Set up Gmail push notifications for instant email processing
+        if (account.access_token && process.env.GOOGLE_CLOUD_PROJECT_ID) {
+          try {
+            const topicName = `projects/${process.env.GOOGLE_CLOUD_PROJECT_ID}/topics/ea-inbox-notifications`;
+            await setupUserWatchWithToken(account.access_token, topicName);
+          } catch (watchErr) {
+            console.error('Gmail watch setup on sign-in failed:', watchErr);
+          }
+        }
 
         if (error) {
           console.error('Failed to upsert team member:', error);
