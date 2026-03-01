@@ -159,6 +159,8 @@ export async function runTriagePipeline(
           gmail_message_id: email.id,
           gmail_thread_id: email.threadId,
           from_address: email.from,
+          to_addresses: email.to ?? null,
+          cc_addresses: email.cc ?? null,
           subject: email.subject,
           snippet: email.snippet,
           received_at: email.receivedAt,
@@ -226,8 +228,21 @@ export async function runTriagePipeline(
             ? email.subject
             : `Re: ${email.subject ?? ''}`;
 
+          // Build Reply All recipients: Cc = original To + Cc, minus our own email
+          const myEmail = member.email.toLowerCase();
+          const parseAddresses = (raw?: string | null) =>
+            (raw ?? '').split(',').map(a => a.trim()).filter(Boolean);
+          const ccList = [
+            ...parseAddresses(originalEmail.to),
+            ...parseAddresses(originalEmail.cc),
+          ].filter(addr => {
+            const email = addr.match(/<([^>]+)>/)?.[1] ?? addr;
+            return email.toLowerCase() !== myEmail;
+          });
+
           const gmailDraftId = await createGmailDraft(member as TeamMember, {
             to: senderEmail,
+            cc: ccList.length > 0 ? ccList.join(', ') : undefined,
             subject: replySubject,
             body: draftText,
             inReplyTo: originalEmail.messageIdHeader,

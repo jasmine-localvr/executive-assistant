@@ -101,6 +101,8 @@ export async function fetchInboxEmails(
       id: msg.data.id!,
       threadId: msg.data.threadId!,
       from: getHeader('From'),
+      to: getHeader('To') || undefined,
+      cc: getHeader('Cc') || undefined,
       subject: getHeader('Subject'),
       snippet: msg.data.snippet ?? '',
       body: body.slice(0, 10000), // Cap body length for Claude
@@ -247,6 +249,7 @@ export async function markAsRead(
 
 interface DraftOptions {
   to: string;
+  cc?: string;
   subject: string;
   body: string;
   inReplyTo?: string;
@@ -265,6 +268,10 @@ export async function createGmailDraft(
     `Subject: ${options.subject}`,
     'Content-Type: text/plain; charset=utf-8',
   ];
+
+  if (options.cc) {
+    headers.push(`Cc: ${options.cc}`);
+  }
 
   if (options.inReplyTo) {
     headers.push(`In-Reply-To: ${options.inReplyTo}`);
