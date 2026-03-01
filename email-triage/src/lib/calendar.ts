@@ -13,21 +13,31 @@ export interface CalendarEvent {
 }
 
 /**
- * Fetch today's events from a team member's primary Google Calendar.
+ * Fetch events for a given day from a team member's primary Google Calendar.
+ * Defaults to today. Pass a date string (YYYY-MM-DD) to fetch a different day.
  * Returns events sorted by start time, excluding declined events.
  */
 export async function fetchTodayEvents(
-  member: TeamMember
+  member: TeamMember,
+  dateOverride?: string
 ): Promise<CalendarEvent[]> {
   const auth = await getAuthedClient(member);
   const calendar = google.calendar({ version: 'v3', auth });
 
-  // Today in Mountain Time
   const tz = 'America/Denver';
-  const now = new Date();
-  const todayStart = new Date(
-    now.toLocaleDateString('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
-  );
+  let todayStart: Date;
+
+  if (dateOverride) {
+    // Parse YYYY-MM-DD directly (treat as local date in Mountain Time)
+    const [y, m, d] = dateOverride.split('-').map(Number);
+    todayStart = new Date(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T00:00:00`);
+  } else {
+    const now = new Date();
+    todayStart = new Date(
+      now.toLocaleDateString('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+    );
+  }
+
   const todayEnd = new Date(todayStart);
   todayEnd.setDate(todayEnd.getDate() + 1);
 

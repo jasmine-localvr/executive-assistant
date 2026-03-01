@@ -249,7 +249,8 @@ function formatGap(minutes: number): string {
 
 export async function sendCalendarSummary(
   slackUserId: string,
-  events: CalendarEvent[]
+  events: CalendarEvent[],
+  dateOverride?: string
 ): Promise<void> {
   const client = getClient();
 
@@ -257,7 +258,8 @@ export async function sendCalendarSummary(
   const channelId = conversation.channel?.id;
   if (!channelId) throw new Error('Failed to open DM channel');
 
-  const today = new Date().toLocaleDateString('en-US', {
+  const dateForHeader = dateOverride ? new Date(`${dateOverride}T12:00:00`) : new Date();
+  const today = dateForHeader.toLocaleDateString('en-US', {
     timeZone: 'America/Denver',
     weekday: 'long',
     month: 'long',

@@ -19,6 +19,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Optional date override for testing (e.g. ?date=2026-03-02)
+  const dateOverride = request.nextUrl.searchParams.get('date') ?? undefined;
+
   const { data: members, error } = await supabase
     .from('team_members')
     .select('*')
@@ -40,9 +43,9 @@ export async function GET(request: NextRequest) {
 
   for (const member of members) {
     try {
-      const events = await fetchTodayEvents(member as TeamMember);
+      const events = await fetchTodayEvents(member as TeamMember, dateOverride);
 
-      await sendCalendarSummary(member.slack_user_id, events);
+      await sendCalendarSummary(member.slack_user_id, events, dateOverride);
 
       sent.push({
         memberId: member.id,
