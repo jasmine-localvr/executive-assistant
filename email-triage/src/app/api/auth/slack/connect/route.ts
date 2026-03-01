@@ -31,10 +31,10 @@ export async function GET() {
     user_scope: 'identity.basic',
     redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/slack/callback`,
     state: memberId,
+    team: 'T3VTHDA84', // LocalVR workspace — skips the workspace selector
   });
 
-  // Use workspace-specific URL so users aren't prompted for a workspace
   return NextResponse.redirect(
-    `https://grid-golocalvr.enterprise.slack.com/oauth/v2/authorize?${params.toString()}`
+    `https://slack.com/oauth/v2/authorize?${params.toString()}`
   );
 }
