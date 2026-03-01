@@ -8,6 +8,7 @@ export interface CalendarEvent {
   endTime: string | null;
   allDay: boolean;
   attendees: string[]; // display names or emails
+  externalAttendees: string[]; // non-@golocalvr.com attendee names
   meetLink: string | null;
   location: string | null;
 }
@@ -65,13 +66,26 @@ export async function fetchTodayEvents(
     const endTime = item.end?.dateTime ?? null;
 
     // Extract attendee names (first name only), exclude self
-    const attendees = (item.attendees ?? [])
-      .filter((a) => !a.self && !a.resource)
+    const otherAttendees = (item.attendees ?? [])
+      .filter((a) => !a.self && !a.resource);
+
+    const attendees = otherAttendees
       .map((a) => {
         if (a.displayName) {
           return a.displayName.split(' ')[0];
         }
-        // Fall back to email prefix
+        return (a.email ?? '').split('@')[0];
+      })
+      .filter(Boolean);
+
+    // External attendees: anyone not @golocalvr.com
+    const externalAttendees = otherAttendees
+      .filter((a) => {
+        const email = (a.email ?? '').toLowerCase();
+        return email && !email.endsWith('@golocalvr.com');
+      })
+      .map((a) => {
+        if (a.displayName) return a.displayName.split(' ')[0];
         return (a.email ?? '').split('@')[0];
       })
       .filter(Boolean);
@@ -90,6 +104,7 @@ export async function fetchTodayEvents(
       endTime,
       allDay,
       attendees,
+      externalAttendees,
       meetLink,
       location: item.location ?? null,
     });
