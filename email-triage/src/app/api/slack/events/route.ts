@@ -8,6 +8,8 @@ import {
 } from '@/lib/slack-feedback';
 import { WebClient } from '@slack/web-api';
 
+export const maxDuration = 300; // 5 minutes — triage pipeline runs in after()
+
 function getSlackClient() {
   return new WebClient(process.env.SLACK_BOT_TOKEN);
 }

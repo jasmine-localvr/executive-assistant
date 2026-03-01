@@ -212,7 +212,7 @@ export async function handleTriageNow(
 
   try {
     const result = await runTriagePipeline(memberId, {
-      emailCount: 200,
+      emailCount: 50,
       skipDigest: false,
     });
 

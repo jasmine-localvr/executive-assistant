@@ -3,6 +3,8 @@ import { getTeamMemberBySlackId } from '@/lib/override-rules';
 import { handleTriageNow } from '@/lib/slack-feedback';
 import { WebClient } from '@slack/web-api';
 
+export const maxDuration = 300; // 5 minutes — pipeline classifies many emails
+
 function getSlackClient() {
   return new WebClient(process.env.SLACK_BOT_TOKEN);
 }
