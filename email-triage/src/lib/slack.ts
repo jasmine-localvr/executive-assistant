@@ -332,18 +332,19 @@ export async function sendCalendarSummary(
 
         blocks.push({
           type: 'actions',
+          block_id: `rsvp_${evt.eventId}`,
           elements: [
             {
               type: 'button',
               text: { type: 'plain_text', text: `✓ ${truncated}` },
               action_id: `calendar_accept_${evt.eventId}`,
-              value: `${evt.eventId}|${memberId}`,
+              value: `${evt.eventId}|${memberId}|${evt.title}`,
             },
             {
               type: 'button',
               text: { type: 'plain_text', text: `✗ Decline` },
               action_id: `calendar_decline_${evt.eventId}`,
-              value: `${evt.eventId}|${memberId}`,
+              value: `${evt.eventId}|${memberId}|${evt.title}`,
             },
           ],
         });
