@@ -1,17 +1,24 @@
 import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
+import SlackConnectedRedirect from '@/components/SlackConnectedRedirect';
 
 export default async function ConnectSlackPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; connected?: string }>;
 }) {
   const session = await auth();
   if (!session) redirect('/login');
   if (session.user.slackConnected) redirect('/');
 
   const params = await searchParams;
+
+  // After Slack OAuth callback, refresh the session JWT and redirect home
+  if (params.connected === 'true') {
+    return <SlackConnectedRedirect />;
+  }
+
   const error = params.error;
 
   return (

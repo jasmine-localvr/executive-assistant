@@ -33,7 +33,8 @@ export async function GET() {
     state: memberId,
   });
 
+  // Use workspace-specific URL so users aren't prompted for a workspace
   return NextResponse.redirect(
-    `https://slack.com/oauth/v2/authorize?${params.toString()}`
+    `https://grid-golocalvr.enterprise.slack.com/oauth/v2/authorize?${params.toString()}`
   );
 }

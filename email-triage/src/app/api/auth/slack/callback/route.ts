@@ -65,8 +65,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Redirect to home — the client will trigger a session update
-    return NextResponse.redirect(new URL('/?slack=connected', request.url));
+    // Redirect back to connect-slack with success flag.
+    // The middleware allows /connect-slack through, and the page will
+    // trigger a session update to refresh the JWT before redirecting home.
+    return NextResponse.redirect(new URL('/connect-slack?connected=true', request.url));
   } catch (err) {
     console.error('Slack OAuth callback error:', err);
     return NextResponse.redirect(
