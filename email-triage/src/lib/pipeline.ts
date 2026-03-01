@@ -214,11 +214,29 @@ export async function runTriagePipeline(
       // PHASE 3: PER-TIER GMAIL ACTIONS
       // ═══════════════════════════════════════════
 
+      // Addresses that should never receive draft replies
+      const NO_REPLY_PATTERNS = [
+        /no-?reply/i, /noreply/i, /do-?not-?reply/i,
+        /notifications?@/i, /alerts?@/i, /system@/i,
+        /mailer-daemon/i, /postmaster@/i,
+      ];
+
+      function isNoReplyAddress(from: string): boolean {
+        const addr = from.match(/<([^>]+)>/)?.[1] ?? from;
+        return NO_REPLY_PATTERNS.some((p) => p.test(addr));
+      }
+
       // Helper to create a draft for an email
       async function createDraftForEmail(email: ClassifiedEmail): Promise<boolean> {
         const originalEmail = emailMap.get(email.gmail_message_id);
         const classification = classificationMap.get(email.gmail_message_id);
         if (!originalEmail || !classification) return false;
+
+        // Never draft replies to no-reply/system addresses
+        if (isNoReplyAddress(email.from_address ?? '')) {
+          await log('info', 'draft', `Skipping draft (no-reply address): ${email.subject?.slice(0, 60)}`);
+          return false;
+        }
 
         try {
           await log('info', 'draft', `Generating draft reply for: ${email.subject?.slice(0, 60)}`);
@@ -226,7 +244,8 @@ export async function runTriagePipeline(
           const draftText = await generateDraftReply(
             originalEmail,
             classification,
-            member.email_style
+            member.email_style,
+            member.name
           );
 
           const senderEmail = email.from_address?.match(/<([^>]+)>/)?.[1] ?? email.from_address ?? '';
@@ -350,7 +369,7 @@ export async function runTriagePipeline(
         }
       }
 
-      // ── Tier 4: Label (keep in inbox, keep unread) + ALWAYS draft ──
+      // ── Tier 4: Label (keep in inbox, keep unread) + Draft if needs_reply ──
       const { data: t4Emails } = await supabase
         .from('classified_emails')
         .select('*')
@@ -367,8 +386,7 @@ export async function runTriagePipeline(
           await log('error', 'archive', `T4 failed "${email.subject?.slice(0, 40)}": ${msg}`);
         }
 
-        // T4 always gets a draft reply (high priority = always prepare a response)
-        if (member.feature_inbox_drafting) {
+        if (email.needs_reply && member.feature_inbox_drafting) {
           await createDraftForEmail(email as ClassifiedEmail);
         }
       }

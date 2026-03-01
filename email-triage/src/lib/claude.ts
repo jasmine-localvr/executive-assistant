@@ -36,15 +36,19 @@ TIER 4 - HIGH PRIORITY (keep in inbox, keep unread):
 - Partnership or contract discussions
 - Direct requests requiring executive attention
 
-NEEDS_REPLY RULES — set needs_reply to true ONLY when a human reply is clearly expected:
-- Someone asked a direct question or made a request
-- A conversation thread where the exec is expected to respond
-- A partner, client, or colleague waiting on a response
-Set needs_reply to FALSE for:
-- Transactional notices (payment receipts, billing alerts, failed charges)
-- System alerts (login failures, security warnings, deployment notices)
-- Automated notifications (device setup, form submissions, health alerts)
-- Anything where no human is waiting for a response
+NEEDS_REPLY RULES — set needs_reply to true ONLY when ALL of these are true:
+1. A specific human (not a system) sent the email and is waiting for a response
+2. There is a clear, explicit question or request directed at the recipient
+3. Failing to reply would leave that person without an answer they need
+
+Set needs_reply to FALSE for (ALWAYS false, no exceptions):
+- Any sender address containing "noreply", "no-reply", "notifications", "alerts", "system", "mailer-daemon"
+- Payment/billing notices (failed charges, receipts, balance updates, subscription changes)
+- System/platform alerts (import failures, deployment notices, security warnings, health alerts)
+- Automated notifications (form submissions, device setup, usage reports, threshold alerts)
+- FYI/informational emails where no one is waiting for your response
+- Internal tool notifications (NetSuite, Rippling, Mercury, Google Workspace, etc.)
+- Emails that describe a problem but don't ask YOU to reply (e.g. "your payment failed" — you fix it in a dashboard, not by replying)
 
 Respond ONLY with valid JSON, no markdown fences:
 {
@@ -145,34 +149,41 @@ ${email.body}`;
 
 // ─── Draft Reply Generation ───
 
-const DRAFT_REPLY_PROMPT = `You are drafting an email reply on behalf of a vacation rental property management executive at LocalVR.
+const DRAFT_REPLY_PROMPT = `You are drafting an email reply on behalf of {USER_NAME}, a vacation rental property management executive at LocalVR.
 
 Write a professional, complete reply that:
 - Directly addresses the sender's question or request
 - Is warm but efficient
-- Includes a proper greeting and sign-off
 - Includes concrete next steps where appropriate
 - Is ready to send with minimal editing
-- Do NOT include an email signature block (name, title, phone number, company info, etc.) — the user's email client handles signatures automatically
+
+SIGNATURE RULES (CRITICAL — follow exactly):
+- End the email with ONLY the closing phrase from the style guide (e.g. "Best,")
+- Do NOT add anything after the closing — no name, no title, no phone, no company, no links
+- The user's email client adds their signature automatically
+- If you add a name or signature block, the email will have a duplicate signature
 
 {STYLE_GUIDE}
 
 Return ONLY the email body text. No JSON, no subject line, no metadata. Start with the greeting.`;
 
-function buildDraftSystemPrompt(emailStyle?: string | null): string {
+function buildDraftSystemPrompt(userName: string, emailStyle?: string | null): string {
   const styleSection = emailStyle
     ? `Write a reply matching this person's email style:\n\n${emailStyle}`
     : 'Use a professional, friendly tone.';
 
-  return DRAFT_REPLY_PROMPT.replace('{STYLE_GUIDE}', styleSection);
+  return DRAFT_REPLY_PROMPT
+    .replace('{USER_NAME}', userName)
+    .replace('{STYLE_GUIDE}', styleSection);
 }
 
 export async function generateDraftReply(
   email: GmailMessage,
   classification: ClassificationResult,
-  emailStyle?: string | null
+  emailStyle?: string | null,
+  userName?: string | null
 ): Promise<string> {
-  const systemPrompt = buildDraftSystemPrompt(emailStyle);
+  const systemPrompt = buildDraftSystemPrompt(userName ?? 'the executive', emailStyle);
 
   const userMessage = `Original email to reply to:
 From: ${email.from}
