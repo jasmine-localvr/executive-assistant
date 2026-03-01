@@ -336,7 +336,6 @@ export async function sendCalendarSummary(
             {
               type: 'button',
               text: { type: 'plain_text', text: `✓ ${truncated}` },
-              style: 'primary',
               action_id: `calendar_accept_${evt.eventId}`,
               value: `${evt.eventId}|${memberId}`,
             },
