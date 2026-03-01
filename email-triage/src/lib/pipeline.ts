@@ -154,7 +154,7 @@ export async function runTriagePipeline(
 
         classificationMap.set(email.id, classification);
 
-        await supabase.from('classified_emails').insert({
+        const { error: insertError } = await supabase.from('classified_emails').insert({
           triage_run_id: run.id,
           team_member_id: teamMemberId,
           gmail_message_id: email.id,
@@ -175,6 +175,11 @@ export async function runTriagePipeline(
           needs_reply: classification.needs_reply,
           draft_reply_text: classification.draft_reply,
         });
+
+        if (insertError) {
+          await log('error', 'classify', `DB insert failed for "${email.subject?.slice(0, 40)}": ${insertError.message}`);
+          continue;
+        }
 
         if (classification.tier === 1) tier1Count++;
         else if (classification.tier === 2) tier2Count++;
