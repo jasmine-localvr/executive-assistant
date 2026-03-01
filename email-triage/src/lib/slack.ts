@@ -1,5 +1,6 @@
 import { WebClient } from '@slack/web-api';
 import type { ClassifiedEmail } from '@/types';
+import type { CalendarEvent } from './calendar';
 
 function getClient() {
   return new WebClient(process.env.SLACK_BOT_TOKEN);
@@ -214,6 +215,150 @@ export async function sendTriageDigest(
     : blocks;
 
   const fallback = `Inbox triage: ${tier4Emails.length} high priority, ${tier3Emails.length} for visibility, ${tier2Emails.length} low priority`;
+
+  await client.chat.postMessage({
+    channel: channelId,
+    text: fallback,
+    blocks: finalBlocks,
+  });
+}
+
+// ─── Calendar Morning Summary ───
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    timeZone: 'America/Denver',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function minutesBetween(a: string, b: string): number {
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000);
+}
+
+function formatGap(minutes: number): string {
+  if (minutes >= 60) {
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hrs} hr ${mins} min` : `${hrs} hr`;
+  }
+  return `${minutes} min`;
+}
+
+export async function sendCalendarSummary(
+  slackUserId: string,
+  events: CalendarEvent[]
+): Promise<void> {
+  const client = getClient();
+
+  const conversation = await client.conversations.open({ users: slackUserId });
+  const channelId = conversation.channel?.id;
+  if (!channelId) throw new Error('Failed to open DM channel');
+
+  const today = new Date().toLocaleDateString('en-US', {
+    timeZone: 'America/Denver',
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blocks: any[] = [];
+
+  if (events.length === 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `📅 *Your Day — ${today}*\nNo meetings today. Clear schedule!` },
+    });
+  } else {
+    const meetingCount = events.filter((e) => !e.allDay).length;
+    const allDayCount = events.filter((e) => e.allDay).length;
+    const countParts: string[] = [];
+    if (meetingCount > 0) countParts.push(`${meetingCount} meeting${meetingCount === 1 ? '' : 's'}`);
+    if (allDayCount > 0) countParts.push(`${allDayCount} all-day`);
+
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `📅 *Your Day — ${today}* (${countParts.join(', ')})` },
+    });
+
+    // All-day events first
+    const allDayEvents = events.filter((e) => e.allDay);
+    for (const evt of allDayEvents) {
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: `🗓️ *All Day* — ${evt.title}` },
+      });
+    }
+
+    // Timed events with free-time gaps
+    const timedEvents = events.filter((e) => !e.allDay);
+    for (let i = 0; i < timedEvents.length; i++) {
+      const evt = timedEvents[i];
+
+      // Show free gap before this event (if > 15 min)
+      if (i > 0 && timedEvents[i - 1].endTime && evt.startTime) {
+        const gap = minutesBetween(timedEvents[i - 1].endTime!, evt.startTime);
+        if (gap >= 15) {
+          blocks.push({
+            type: 'context',
+            elements: [{ type: 'mrkdwn', text: `— ${formatGap(gap)} free —` }],
+          });
+        }
+      }
+
+      const time = evt.startTime && evt.endTime
+        ? `${formatTime(evt.startTime)} – ${formatTime(evt.endTime)}`
+        : '';
+
+      let detail = `⏰ ${time}\n*${evt.title}*`;
+
+      if (evt.attendees.length > 0) {
+        const shown = evt.attendees.slice(0, 5);
+        const extra = evt.attendees.length > 5 ? ` and ${evt.attendees.length - 5} more` : '';
+        detail += `\n👥 ${shown.join(', ')}${extra}`;
+      }
+
+      if (evt.meetLink) {
+        detail += `\n🔗 <${evt.meetLink}|Join>`;
+      } else if (evt.location) {
+        detail += `\n📍 ${evt.location}`;
+      }
+
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: detail },
+      });
+    }
+  }
+
+  // Footer
+  const now = new Date().toLocaleString('en-US', {
+    timeZone: 'America/Denver',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+
+  blocks.push({
+    type: 'context',
+    elements: [{ type: 'mrkdwn', text: `${now} MST · Primary Calendar` }],
+  });
+
+  // Truncate if over Slack's 50-block limit
+  const maxBlocks = 50;
+  const finalBlocks = blocks.length > maxBlocks
+    ? [
+        ...blocks.slice(0, maxBlocks - 1),
+        { type: 'context', elements: [{ type: 'mrkdwn', text: '_…see Google Calendar for full schedule_' }] },
+      ]
+    : blocks;
+
+  const fallback = events.length > 0
+    ? `📅 ${today}: ${events.length} event${events.length === 1 ? '' : 's'}`
+    : `📅 ${today}: No meetings`;
 
   await client.chat.postMessage({
     channel: channelId,

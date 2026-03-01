@@ -3,14 +3,14 @@ import { supabase } from './supabase';
 import { encrypt, decrypt } from './encryption';
 import type { TeamMember, GmailMessage } from '@/types';
 
-function createOAuth2Client() {
+export function createOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET
   );
 }
 
-async function getAuthedClient(member: TeamMember) {
+export async function getAuthedClient(member: TeamMember) {
   const oauth2Client = createOAuth2Client();
 
   const tokenExpiry = member.gmail_token_expiry
