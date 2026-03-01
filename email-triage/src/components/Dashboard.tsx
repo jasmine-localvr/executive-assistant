@@ -91,6 +91,51 @@ export default function Dashboard() {
         <ActivityLog logs={logs} />
       </div>
 
+      {/* Tier definitions */}
+      <div className="rounded-md border border-brand-border bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+        <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
+          How Tiers Work
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded border border-brand-border p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-base">⚪</span>
+              <span className="text-sm font-semibold text-charcoal">Tier 1 — Noise</span>
+            </div>
+            <p className="text-xs leading-relaxed text-medium-gray">
+              Marketing newsletters, vendor promos, automated notifications. Auto-labeled, archived, and marked read.
+            </p>
+          </div>
+          <div className="rounded border border-brand-border p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-base">🟡</span>
+              <span className="text-sm font-semibold text-charcoal">Tier 2 — Low Priority</span>
+            </div>
+            <p className="text-xs leading-relaxed text-medium-gray">
+              FYI-only CCs, routine confirmations, non-urgent vendor updates. Labeled, archived, and marked read. May draft a reply.
+            </p>
+          </div>
+          <div className="rounded border border-brand-border p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-base">👀</span>
+              <span className="text-sm font-semibold text-charcoal">Tier 3 — For Visibility</span>
+            </div>
+            <p className="text-xs leading-relaxed text-medium-gray">
+              Worth being aware of but rarely needs action. Labeled and kept in your inbox unread. May draft a reply.
+            </p>
+          </div>
+          <div className="rounded border border-brand-border p-4">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-base">🔴</span>
+              <span className="text-sm font-semibold text-charcoal">Tier 4 — High Priority</span>
+            </div>
+            <p className="text-xs leading-relaxed text-medium-gray">
+              Emails from @golocalvr.com, owner comms, guest escalations, financial/legal matters. Labeled, kept in inbox unread, and a draft reply is created.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Email list */}
       <div>
         <div className="mb-3 flex items-center gap-3">

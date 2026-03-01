@@ -1,43 +1,41 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import ActivityLog from '@/components/ActivityLog';
 import type { TriageRun, PipelineLog } from '@/types';
 
 export default function HistoryPage() {
+  const { data: session } = useSession();
+  const memberId = session?.user?.teamMemberId;
+
   const [runs, setRuns] = useState<TriageRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [logs, setLogs] = useState<PipelineLog[]>([]);
 
   useEffect(() => {
-    fetch('/api/team')
+    if (!memberId) return;
+    fetch('/api/runs')
       .then((r) => r.json())
-      .then(() => {
-        // TODO: Add /api/runs endpoint for paginated run history
+      .then((data) => {
+        if (Array.isArray(data)) setRuns(data);
       })
       .catch(console.error);
-  }, []);
+  }, [memberId]);
 
   useEffect(() => {
     if (!selectedRunId) return;
-    Promise.all([
-      fetch(`/api/pipeline/status/${selectedRunId}`).then((r) => r.json()),
-      fetch(`/api/pipeline/logs/${selectedRunId}`).then((r) => r.json()),
-    ]).then(([run, runLogs]) => {
-      setRuns((prev) => {
-        const exists = prev.find((r) => r.id === run.id);
-        if (exists) return prev;
-        return [run, ...prev];
-      });
-      setLogs(runLogs);
-    });
+    fetch(`/api/pipeline/logs/${selectedRunId}`)
+      .then((r) => r.json())
+      .then(setLogs)
+      .catch(console.error);
   }, [selectedRunId]);
 
   return (
     <div>
       <h1 className="mb-6 font-serif text-[32px] text-charcoal">Run History</h1>
 
-      {runs.length === 0 && !selectedRunId && (
+      {runs.length === 0 && (
         <div className="rounded-md border border-brand-border bg-white p-8 text-center shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
           <p className="text-sm text-medium-gray">
             No triage runs yet. Go to the Dashboard to run the pipeline.

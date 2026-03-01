@@ -1,20 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import type { WeeklySchedule, DailySummary, UpdateFrequency } from '@/types';
 import {
   WEEKLY_SCHEDULE_OPTIONS,
   DAILY_SUMMARY_OPTIONS,
   UPDATE_FREQUENCY_OPTIONS,
 } from '@/types';
-
-// ─── Types ───
-
-interface TeamMemberOption {
-  id: string;
-  name: string;
-  email: string;
-}
 
 interface FeatureState {
   feature_inbox_management: boolean;
@@ -92,8 +85,8 @@ function FeatureCard({
 // ─── Main Component ───
 
 export default function FeatureSettings() {
-  const [members, setMembers] = useState<TeamMemberOption[]>([]);
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const { data: session } = useSession();
+  const memberId = session?.user?.teamMemberId ?? null;
   const [features, setFeatures] = useState<FeatureState | null>(null);
   const [loading, setLoading] = useState(false);
   const [savedField, setSavedField] = useState<string | null>(null);
@@ -108,24 +101,11 @@ export default function FeatureSettings() {
   const [draftDailySummaries, setDraftDailySummaries] = useState<DailySummary[]>(['morning']);
   const [draftUpdateFrequency, setDraftUpdateFrequency] = useState<UpdateFrequency>('every_2_hours');
 
-  // Load team members
+  // Load feature settings for the current user
   useEffect(() => {
-    fetch('/api/team')
-      .then((r) => r.json())
-      .then((data) => {
-        setMembers(data);
-        if (data.length > 0 && !selectedMemberId) {
-          setSelectedMemberId(data[0].id);
-        }
-      })
-      .catch(console.error);
-  }, [selectedMemberId]);
-
-  // Load feature settings when member changes
-  useEffect(() => {
-    if (!selectedMemberId) return;
+    if (!memberId) return;
     setLoading(true);
-    fetch(`/api/team/${selectedMemberId}/features`)
+    fetch(`/api/team/${memberId}/features`)
       .then((r) => r.json())
       .then((data) => {
         const state: FeatureState = {
@@ -150,13 +130,13 @@ export default function FeatureSettings() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [selectedMemberId]);
+  }, [memberId]);
 
   // Save helper
   const patchFeature = useCallback(
     async (updates: Partial<FeatureState>) => {
-      if (!selectedMemberId) return;
-      const res = await fetch(`/api/team/${selectedMemberId}/features`, {
+      if (!memberId) return;
+      const res = await fetch(`/api/team/${memberId}/features`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates),
@@ -167,7 +147,7 @@ export default function FeatureSettings() {
         return data;
       }
     },
-    [selectedMemberId]
+    [memberId]
   );
 
   // Toggle handler — saves immediately
@@ -210,11 +190,11 @@ export default function FeatureSettings() {
     : false;
 
   async function analyzeStyle() {
-    if (!selectedMemberId) return;
+    if (!memberId) return;
     setAnalyzingStyle(true);
     setAnalyzeError(null);
     try {
-      const res = await fetch(`/api/team/${selectedMemberId}/analyze-style`, {
+      const res = await fetch(`/api/team/${memberId}/analyze-style`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -247,50 +227,14 @@ export default function FeatureSettings() {
     showSaved('ea_custom_instructions');
   }
 
-  if (loading || !features) {
+  if (!memberId || loading || !features) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <label className="text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
-            Team Member
-          </label>
-          <select
-            value={selectedMemberId ?? ''}
-            onChange={(e) => setSelectedMemberId(e.target.value)}
-            className="rounded border border-brand-border bg-white px-3 py-2 text-sm text-charcoal"
-          >
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.email})
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="text-sm text-medium-gray">Loading feature settings...</p>
-      </div>
+      <p className="text-sm text-medium-gray">Loading feature settings...</p>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Member selector */}
-      <div className="flex items-center gap-4">
-        <label className="text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
-          Team Member
-        </label>
-        <select
-          value={selectedMemberId ?? ''}
-          onChange={(e) => setSelectedMemberId(e.target.value)}
-          className="rounded border border-brand-border bg-white px-3 py-2 text-sm text-charcoal"
-        >
-          {members.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name} ({m.email})
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* Feature 1: Inbox Management */}
       <FeatureCard
         title="Inbox Management"
