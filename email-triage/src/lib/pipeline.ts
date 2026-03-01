@@ -238,6 +238,13 @@ export async function runTriagePipeline(
           return false;
         }
 
+        // Never draft replies to calendar invitations (accept/decline via calendar UI)
+        const subj = (email.subject ?? '').toLowerCase();
+        if (subj.startsWith('invitation:') || subj.startsWith('updated invitation:') || subj.startsWith('canceled:') || subj.startsWith('accepted:') || subj.startsWith('declined:') || subj.startsWith('tentative:')) {
+          await log('info', 'draft', `Skipping draft (calendar invite): ${email.subject?.slice(0, 60)}`);
+          return false;
+        }
+
         try {
           await log('info', 'draft', `Generating draft reply for: ${email.subject?.slice(0, 60)}`);
 

@@ -43,6 +43,7 @@ NEEDS_REPLY RULES — set needs_reply to true ONLY when ALL of these are true:
 
 Set needs_reply to FALSE for (ALWAYS false, no exceptions):
 - Any sender address containing "noreply", "no-reply", "notifications", "alerts", "system", "mailer-daemon"
+- Calendar invitations (subject starts with "Invitation:", "Updated Invitation:", "Canceled:", or contains .ics attachments) — accept/decline via calendar UI, not email
 - Payment/billing notices (failed charges, receipts, balance updates, subscription changes)
 - System/platform alerts (import failures, deployment notices, security warnings, health alerts)
 - Automated notifications (form submissions, device setup, usage reports, threshold alerts)
