@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { getTeamMemberBySlackId } from '@/lib/override-rules';
 import {
   handleTierCorrection,
   handleShowRules,
   handleDeleteRule,
+  handleTriageNow,
 } from '@/lib/slack-feedback';
 import { WebClient } from '@slack/web-api';
 
@@ -63,6 +64,27 @@ export async function POST(req: Request) {
 
   if (trimmed.startsWith('delete rule')) {
     await handleDeleteRule(channelId, member.id, messageText);
+    return new Response('OK', { status: 200 });
+  }
+
+  if (trimmed === 'triage' || trimmed === 'triage now' || trimmed === 'check inbox') {
+    await sendSlackMessage(channelId, 'Got it! Triaging your inbox now...');
+    after(async () => {
+      await handleTriageNow(channelId, member.id);
+    });
+    return new Response('OK', { status: 200 });
+  }
+
+  if (trimmed === 'help') {
+    await sendSlackMessage(
+      channelId,
+      '*Available commands:*\n\n' +
+        '\u2022 *triage* — Run inbox triage now (classify, archive, draft replies, send summary)\n' +
+        '\u2022 *show rules* — List your tier override rules\n' +
+        '\u2022 *delete rule [number]* — Remove an override rule\n' +
+        '\u2022 *help* — Show this message\n\n' +
+        'You can also send tier corrections like "Roku emails \u2192 Tier 1" and I\'ll create a rule for you.'
+    );
     return new Response('OK', { status: 200 });
   }
 

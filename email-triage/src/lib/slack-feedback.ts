@@ -5,6 +5,8 @@ import {
   upsertOverrideRule,
   deactivateOverrideRule,
 } from './override-rules';
+import { supabase } from './supabase';
+import { runTriagePipeline } from './pipeline';
 import type { ParsedOverrideRule, TierOverrideRule } from '@/types';
 
 const anthropic = new Anthropic();
@@ -184,4 +186,54 @@ export async function handleDeleteRule(
     channelId,
     `\u2713 Rule ${ruleIndex + 1} deleted. Type *show rules* to see your remaining rules.`
   );
+}
+
+// ─── Triage Now (on-demand pipeline run) ───
+
+export async function handleTriageNow(
+  channelId: string,
+  memberId: string
+): Promise<void> {
+  // Prevent overlapping runs
+  const { data: running } = await supabase
+    .from('triage_runs')
+    .select('id')
+    .eq('team_member_id', memberId)
+    .eq('status', 'running')
+    .limit(1);
+
+  if (running && running.length > 0) {
+    await sendSlackMessage(
+      channelId,
+      'A triage is already running for your inbox. Hang tight — you\'ll get a summary when it\'s done.'
+    );
+    return;
+  }
+
+  try {
+    const result = await runTriagePipeline(memberId, {
+      emailCount: 200,
+      skipDigest: false,
+    });
+
+    if (result.emailsClassified === 0) {
+      await sendSlackMessage(
+        channelId,
+        'All caught up — no new emails to triage.'
+      );
+    } else {
+      const parts: string[] = [];
+      parts.push(`${result.emailsClassified} emails classified`);
+      if (result.archivedCount > 0) parts.push(`${result.archivedCount} archived`);
+      if (result.draftsCreated > 0) parts.push(`${result.draftsCreated} drafts created`);
+      await sendSlackMessage(channelId, `Done — ${parts.join(', ')}.`);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Slack triage-now failed for member ${memberId}:`, msg);
+    await sendSlackMessage(
+      channelId,
+      `Something went wrong: ${msg}`
+    );
+  }
 }
