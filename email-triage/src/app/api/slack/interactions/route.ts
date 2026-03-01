@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { after } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { rsvpToEvent } from '@/lib/calendar';
 import type { TeamMember } from '@/types';
@@ -6,10 +6,12 @@ import type { TeamMember } from '@/types';
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-  const formData = await req.formData();
-  const raw = formData.get('payload');
-  if (!raw || typeof raw !== 'string') {
-    return NextResponse.json({ error: 'Missing payload' }, { status: 400 });
+  // Slack sends application/x-www-form-urlencoded with a "payload" field
+  const body = await req.text();
+  const params = new URLSearchParams(body);
+  const raw = params.get('payload');
+  if (!raw) {
+    return new Response('Missing payload', { status: 400 });
   }
 
   const payload = JSON.parse(raw);
@@ -36,15 +38,11 @@ export async function POST(req: Request) {
     return new Response('OK', { status: 200 });
   }
 
-  const response = isAccept ? 'accepted' : 'declined';
+  const rsvpResponse = isAccept ? 'accepted' as const : 'declined' as const;
   const responseUrl: string | undefined = payload.response_url;
 
-  // Acknowledge immediately, then process in background
-  // Slack requires a response within 3 seconds
-  const ack = new Response('', { status: 200 });
-
-  // Process RSVP async (fire-and-forget, errors logged)
-  (async () => {
+  // Run RSVP work after response using Next.js after() so Vercel keeps the function alive
+  after(async () => {
     try {
       const { data: member, error } = await supabase
         .from('team_members')
@@ -57,18 +55,19 @@ export async function POST(req: Request) {
         return;
       }
 
-      await rsvpToEvent(member as TeamMember, eventId, response);
+      await rsvpToEvent(member as TeamMember, eventId, rsvpResponse);
 
       // Send confirmation via response_url
       if (responseUrl) {
         const emoji = isAccept ? '✅' : '❌';
         const label = isAccept ? 'Accepted' : 'Declined';
+        const eventName = (action.text?.text ?? 'event').replace(/^[✓✗] /, '');
         await fetch(responseUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             replace_original: false,
-            text: `${emoji} ${label}: ${action.text?.text?.replace(/^[✓✗] /, '') ?? 'event'}`,
+            text: `${emoji} ${label}: ${eventName}`,
           }),
         });
       }
@@ -85,7 +84,8 @@ export async function POST(req: Request) {
         }).catch(() => {});
       }
     }
-  })();
+  });
 
-  return ack;
+  // Acknowledge immediately (Slack requires response within 3 seconds)
+  return new Response('', { status: 200 });
 }
