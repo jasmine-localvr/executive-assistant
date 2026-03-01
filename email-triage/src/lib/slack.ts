@@ -139,23 +139,33 @@ export async function sendTriageDigest(
     text: { type: 'mrkdwn', text: `📬 *Inbox Triage* — ${stats.totalClassified} emails` },
   });
 
-  // ── Tier 4: High Priority — numbered, one-line summary ──
+  // ── Tier 4: High Priority — numbered, full detail ──
   if (tier4Emails.length > 0) {
-    const lines = tier4Emails.map((e, i) => {
-      const draft = e.draft_created ? ' 📝' : '';
-      return `${i + 1}. ${e.summary_oneline ?? e.summary}${draft}`;
-    }).join('\n');
-
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `🔴 *High Priority — Left Unread & Applicable Drafts (${tier4Emails.length})*\n${lines}` },
+      text: { type: 'mrkdwn', text: `🔴 *High Priority — Left Unread (${tier4Emails.length})*` },
     });
+
+    for (let i = 0; i < tier4Emails.length; i++) {
+      const e = tier4Emails[i];
+      const from = senderName(e.from_address);
+      const subject = e.subject ?? '(no subject)';
+      const summary = e.summary_oneline ?? e.summary;
+      const draft = e.draft_created ? '\n📝 Draft reply created' : '';
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*${i + 1}. ${subject}*\nFrom: ${from}\n${summary}${draft}` },
+      });
+    }
   }
 
-  // ── Tier 3: For Visibility — bullet, one-line summary ──
+  // ── Tier 3: For Visibility — bullet, subject + from + summary ──
   if (tier3Emails.length > 0) {
     const lines = tier3Emails.map((e) => {
-      return `• ${e.summary_oneline ?? e.summary}`;
+      const from = senderName(e.from_address);
+      const subject = e.subject ?? '(no subject)';
+      const summary = e.summary_oneline ?? e.summary;
+      return `• *${subject}* from ${from} — ${summary}`;
     }).join('\n');
 
     blocks.push({
@@ -164,11 +174,15 @@ export async function sendTriageDigest(
     });
   }
 
-  // ── Tier 2: Low Priority — just a count ──
+  // ── Tier 2: Low Priority — per-email one-liners ──
   if (tier2Emails.length > 0) {
+    const lines = tier2Emails.map((e) => {
+      return `• ${e.summary_oneline ?? e.summary}`;
+    }).join('\n');
+
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `🟡 *Low Priority* — ${tier2Emails.length} archived` },
+      text: { type: 'mrkdwn', text: `🟡 *Low Priority — Archived (${tier2Emails.length})*\n${lines}` },
     });
   }
 

@@ -345,7 +345,7 @@ export async function runTriagePipeline(
         }
       }
 
-      // ── Tier 4: Label (keep in inbox, keep unread) + Draft if needs_reply ──
+      // ── Tier 4: Label (keep in inbox, keep unread) + ALWAYS draft ──
       const { data: t4Emails } = await supabase
         .from('classified_emails')
         .select('*')
@@ -362,7 +362,8 @@ export async function runTriagePipeline(
           await log('error', 'archive', `T4 failed "${email.subject?.slice(0, 40)}": ${msg}`);
         }
 
-        if (email.needs_reply && member.feature_inbox_drafting) {
+        // T4 always gets a draft reply (high priority = always prepare a response)
+        if (member.feature_inbox_drafting) {
           await createDraftForEmail(email as ClassifiedEmail);
         }
       }
