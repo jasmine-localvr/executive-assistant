@@ -11,6 +11,8 @@ export interface CalendarEvent {
   externalAttendees: string[]; // non-@golocalvr.com attendee names
   meetLink: string | null;
   location: string | null;
+  responseStatus: 'accepted' | 'tentative' | 'needsAction' | null;
+  eventId: string;
 }
 
 /**
@@ -98,6 +100,9 @@ export async function fetchTodayEvents(
       )?.uri ??
       null;
 
+    // Self response status
+    const responseStatus = (selfAttendee?.responseStatus as CalendarEvent['responseStatus']) ?? null;
+
     events.push({
       title: item.summary ?? '(No title)',
       startTime,
@@ -107,8 +112,34 @@ export async function fetchTodayEvents(
       externalAttendees,
       meetLink,
       location: item.location ?? null,
+      responseStatus,
+      eventId: item.id ?? '',
     });
   }
 
   return events;
+}
+
+/**
+ * RSVP to a calendar event (accept or decline).
+ */
+export async function rsvpToEvent(
+  member: TeamMember,
+  eventId: string,
+  response: 'accepted' | 'declined'
+): Promise<void> {
+  const auth = await getAuthedClient(member);
+  const calendar = google.calendar({ version: 'v3', auth });
+
+  const event = await calendar.events.get({ calendarId: 'primary', eventId });
+  const attendees = (event.data.attendees ?? []).map((a) => {
+    if (a.self) return { ...a, responseStatus: response };
+    return a;
+  });
+
+  await calendar.events.patch({
+    calendarId: 'primary',
+    eventId,
+    requestBody: { attendees },
+  });
 }

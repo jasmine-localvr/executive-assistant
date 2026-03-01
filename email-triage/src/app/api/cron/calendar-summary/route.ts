@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     try {
       const events = await fetchTodayEvents(member as TeamMember, dateOverride);
 
-      await sendCalendarSummary(member.slack_user_id, events, dateOverride);
+      await sendCalendarSummary(member.slack_user_id, events, member.id, dateOverride);
 
       sent.push({
         memberId: member.id,

@@ -237,6 +237,7 @@ function formatTime(iso: string): string {
 export async function sendCalendarSummary(
   slackUserId: string,
   events: CalendarEvent[],
+  memberId: string,
   dateOverride?: string
 ): Promise<void> {
   const client = getClient();
@@ -277,6 +278,7 @@ export async function sendCalendarSummary(
     }
 
     // Timed events — one bullet per event
+    const needsRsvpEvents: CalendarEvent[] = [];
     for (const evt of events.filter((e) => !e.allDay)) {
       const time = evt.startTime && evt.endTime
         ? `${formatTime(evt.startTime)} - ${formatTime(evt.endTime)}`
@@ -299,6 +301,11 @@ export async function sendCalendarSummary(
         line += ` [External 👥 ${shown.join(', ')}${extra}]`;
       }
 
+      if (evt.responseStatus === 'needsAction') {
+        line += ' ⏳';
+        needsRsvpEvents.push(evt);
+      }
+
       lines.push(line);
     }
 
@@ -309,6 +316,40 @@ export async function sendCalendarSummary(
         text: `📅 *Your Day — ${today}* (${countParts.join(', ')})\n${lines.join('\n')}`,
       },
     });
+
+    // RSVP action buttons for needsAction events
+    if (needsRsvpEvents.length > 0) {
+      blocks.push({
+        type: 'context',
+        elements: [{ type: 'mrkdwn', text: '⏳ *Needs RSVP:*' }],
+      });
+
+      for (const evt of needsRsvpEvents) {
+        const time = evt.startTime ? formatTime(evt.startTime) : '';
+        const label = time ? `${time}: ${evt.title}` : evt.title;
+        // Slack button text max 75 chars
+        const truncated = label.length > 40 ? label.slice(0, 37) + '...' : label;
+
+        blocks.push({
+          type: 'actions',
+          elements: [
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: `✓ ${truncated}` },
+              style: 'primary',
+              action_id: `calendar_accept_${evt.eventId}`,
+              value: `${evt.eventId}|${memberId}`,
+            },
+            {
+              type: 'button',
+              text: { type: 'plain_text', text: `✗ Decline` },
+              action_id: `calendar_decline_${evt.eventId}`,
+              value: `${evt.eventId}|${memberId}`,
+            },
+          ],
+        });
+      }
+    }
   }
 
   const fallback = events.length > 0
