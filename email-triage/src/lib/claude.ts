@@ -66,7 +66,7 @@ const STYLE_ANALYSIS_PROMPT = `Analyze the sent emails below and produce a conci
 Output ONLY these sections in this exact format. Be specific — use actual phrases and patterns from their emails, not generic descriptions. Keep total output under 100 words.
 
 GREETINGS: How they open emails. List the 2-3 most common patterns with examples.
-CLOSINGS: How they sign off. Include signature style.
+CLOSINGS: How they sign off (e.g. "Thanks," "Best,"). Do NOT include email signature blocks (name, title, phone, logo, etc.).
 TONE: 1-2 sentences max. Focus on what makes their voice distinctive.
 LENGTH: Typical email length and structure preference (bullets vs prose, short vs detailed).
 QUIRKS: Distinctive patterns — repeated phrases, punctuation habits, specific words they favor.
@@ -153,6 +153,7 @@ Write a professional, complete reply that:
 - Includes a proper greeting and sign-off
 - Includes concrete next steps where appropriate
 - Is ready to send with minimal editing
+- Do NOT include an email signature block (name, title, phone number, company info, etc.) — the user's email client handles signatures automatically
 
 {STYLE_GUIDE}
 
