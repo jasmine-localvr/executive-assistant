@@ -60,7 +60,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // Set up Gmail push notifications for instant email processing
         if (account.access_token && process.env.GOOGLE_CLOUD_PROJECT_ID) {
           try {
-            const topicName = `projects/${process.env.GOOGLE_CLOUD_PROJECT_ID}/topics/ea-inbox-notifications`;
+            const topicName = `projects/${process.env.GOOGLE_CLOUD_PROJECT_ID}/topics/user-inbox-notifications`;
             await setupUserWatchWithToken(account.access_token, topicName);
           } catch (watchErr) {
             console.error('Gmail watch setup on sign-in failed:', watchErr);

@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const topicName = `projects/${projectId}/topics/ea-inbox-notifications`;
+    const topicName = `projects/${projectId}/topics/user-inbox-notifications`;
     const result = await setupEaWatch(topicName);
     return NextResponse.json({
       success: true,

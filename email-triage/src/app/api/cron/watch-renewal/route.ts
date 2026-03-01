@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const topicName = `projects/${projectId}/topics/ea-inbox-notifications`;
+  const topicName = `projects/${projectId}/topics/user-inbox-notifications`;
 
   const { data: members, error } = await supabase
     .from('team_members')
