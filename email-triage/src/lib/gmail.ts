@@ -292,6 +292,30 @@ export async function markAsRead(
   });
 }
 
+/**
+ * Batch-modify multiple Gmail messages in a single API call.
+ * Archive = remove INBOX, markRead = remove UNREAD.
+ */
+export async function batchModifyMessages(
+  member: TeamMember,
+  messageIds: string[],
+  options: { addLabelIds?: string[]; removeLabelIds?: string[] }
+): Promise<void> {
+  if (messageIds.length === 0) return;
+
+  const auth = await getAuthedClient(member);
+  const gmail = google.gmail({ version: 'v1', auth });
+
+  await gmail.users.messages.batchModify({
+    userId: 'me',
+    requestBody: {
+      ids: messageIds,
+      addLabelIds: options.addLabelIds ?? [],
+      removeLabelIds: options.removeLabelIds ?? [],
+    },
+  });
+}
+
 interface DraftOptions {
   to: string;
   cc?: string;

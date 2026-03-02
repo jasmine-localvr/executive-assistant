@@ -7,7 +7,9 @@ import {
 } from './override-rules';
 import { supabase } from './supabase';
 import { runTriagePipeline } from './pipeline';
-import type { ParsedOverrideRule, TierOverrideRule } from '@/types';
+import { fetchTodayEvents } from './calendar';
+import { sendCalendarSummary } from './slack';
+import type { ParsedOverrideRule, TierOverrideRule, TeamMember } from '@/types';
 
 const anthropic = new Anthropic();
 
@@ -235,5 +237,123 @@ export async function handleTriageNow(
       channelId,
       `Something went wrong: ${msg}`
     );
+  }
+}
+
+// ─── Date Parser for Calendar Prep ───
+
+const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+function getMountainToday(): Date {
+  const now = new Date();
+  const mt = now.toLocaleDateString('en-US', {
+    timeZone: 'America/Denver',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return new Date(mt);
+}
+
+function formatDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function parseDateInput(input: string): string | null {
+  const text = input.toLowerCase().trim();
+
+  if (!text || text === 'today') {
+    return formatDateStr(getMountainToday());
+  }
+
+  if (text === 'tomorrow') {
+    const d = getMountainToday();
+    d.setDate(d.getDate() + 1);
+    return formatDateStr(d);
+  }
+
+  // "next monday", "next friday", etc.
+  const nextMatch = text.match(/^next\s+(\w+)$/);
+  if (nextMatch) {
+    const dayIdx = DAY_NAMES.indexOf(nextMatch[1]);
+    if (dayIdx !== -1) {
+      const d = getMountainToday();
+      const current = d.getDay();
+      let daysAhead = dayIdx - current;
+      if (daysAhead <= 0) daysAhead += 7;
+      d.setDate(d.getDate() + daysAhead);
+      return formatDateStr(d);
+    }
+  }
+
+  // Plain day name: "monday", "friday" — next occurrence including today
+  const dayIdx = DAY_NAMES.indexOf(text);
+  if (dayIdx !== -1) {
+    const d = getMountainToday();
+    const current = d.getDay();
+    let daysAhead = dayIdx - current;
+    if (daysAhead < 0) daysAhead += 7;
+    d.setDate(d.getDate() + daysAhead);
+    return formatDateStr(d);
+  }
+
+  // Raw YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  return null;
+}
+
+// ─── Calendar Prep (on-demand calendar summary) ───
+
+export async function handleCalendarPrep(
+  channelId: string,
+  memberId: string,
+  userSlackId: string,
+  dateText: string
+): Promise<void> {
+  const dateStr = parseDateInput(dateText);
+
+  if (!dateStr) {
+    await sendSlackMessage(
+      channelId,
+      "I couldn't understand that date. Try:\n" +
+        '\u2022 *prep* — today\'s calendar\n' +
+        '\u2022 *prep tomorrow*\n' +
+        '\u2022 *prep monday* — next occurrence of that day\n' +
+        '\u2022 *prep next friday*\n' +
+        '\u2022 *prep 2026-03-15* — specific date'
+    );
+    return;
+  }
+
+  // Fetch full team member (need OAuth tokens for calendar API)
+  const { data: member, error } = await supabase
+    .from('team_members')
+    .select('*')
+    .eq('id', memberId)
+    .single();
+
+  if (error || !member) {
+    await sendSlackMessage(channelId, 'Could not load your account. Please try again.');
+    return;
+  }
+
+  if (!member.feature_calendar_scheduling) {
+    await sendSlackMessage(channelId, 'Calendar prep is not enabled for your account. Ask an admin to enable it in settings.');
+    return;
+  }
+
+  try {
+    const events = await fetchTodayEvents(member as TeamMember, dateStr);
+    await sendCalendarSummary(userSlackId, events, memberId, dateStr);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Calendar prep failed for member ${memberId}:`, msg);
+    await sendSlackMessage(channelId, `Something went wrong fetching your calendar: ${msg}`);
   }
 }

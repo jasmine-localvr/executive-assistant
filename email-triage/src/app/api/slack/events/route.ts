@@ -5,6 +5,7 @@ import {
   handleShowRules,
   handleDeleteRule,
   handleTriageNow,
+  handleCalendarPrep,
 } from '@/lib/slack-feedback';
 import { WebClient } from '@slack/web-api';
 
@@ -77,11 +78,20 @@ export async function POST(req: Request) {
     return new Response('OK', { status: 200 });
   }
 
+  if (trimmed === 'prep' || trimmed.startsWith('prep ') ||
+      trimmed === 'calendar' || trimmed.startsWith('calendar ') ||
+      trimmed === 'agenda' || trimmed.startsWith('agenda ')) {
+    const dateText = trimmed.replace(/^(prep|calendar|agenda)\s*/, '').trim();
+    await handleCalendarPrep(channelId, member.id, userSlackId, dateText);
+    return new Response('OK', { status: 200 });
+  }
+
   if (trimmed === 'help') {
     await sendSlackMessage(
       channelId,
       '*Available commands:*\n\n' +
         '\u2022 *triage* — Run inbox triage now (classify, archive, draft replies, send summary)\n' +
+        '\u2022 *prep [day]* — Get your calendar for today, tomorrow, Monday, next Friday, etc.\n' +
         '\u2022 *show rules* — List your tier override rules\n' +
         '\u2022 *delete rule [number]* — Remove an override rule\n' +
         '\u2022 *help* — Show this message\n\n' +

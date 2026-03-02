@@ -1,6 +1,6 @@
 import { after } from 'next/server';
 import { getTeamMemberBySlackId } from '@/lib/override-rules';
-import { handleTriageNow } from '@/lib/slack-feedback';
+import { handleTriageNow, handleCalendarPrep } from '@/lib/slack-feedback';
 import { WebClient } from '@slack/web-api';
 
 export const maxDuration = 300; // 5 minutes — pipeline classifies many emails
@@ -22,10 +22,6 @@ export async function POST(req: Request) {
   const command = (form.get('command') as string) ?? '';
   const userSlackId = (form.get('user_id') as string) ?? '';
 
-  if (command !== '/triage') {
-    return new Response('Unknown command', { status: 200 });
-  }
-
   const member = await getTeamMemberBySlackId(userSlackId);
   if (!member) {
     return new Response(
@@ -43,11 +39,22 @@ export async function POST(req: Request) {
     return new Response('Could not open a DM channel.', { status: 200 });
   }
 
-  after(async () => {
-    await handleTriageNow(channelId, member.id);
-  });
+  if (command === '/triage') {
+    after(async () => {
+      await handleTriageNow(channelId, member.id);
+    });
+    return new Response('Got it! Triaging your inbox now... You\'ll get a DM with the results.', {
+      status: 200,
+    });
+  }
 
-  return new Response('Got it! Triaging your inbox now... You\'ll get a DM with the results.', {
-    status: 200,
-  });
+  if (command === '/prep') {
+    const text = (form.get('text') as string) ?? '';
+    after(async () => {
+      await handleCalendarPrep(channelId, member.id, userSlackId, text);
+    });
+    return new Response('Fetching your calendar...', { status: 200 });
+  }
+
+  return new Response('Unknown command', { status: 200 });
 }

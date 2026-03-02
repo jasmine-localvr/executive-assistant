@@ -11,6 +11,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tier = searchParams.get('tier');
   const runId = searchParams.get('runId');
+  const archived = searchParams.get('archived');
+  const limit = searchParams.get('limit');
 
   let query = supabase
     .from('classified_emails')
@@ -20,8 +22,9 @@ export async function GET(request: NextRequest) {
 
   if (tier) query = query.eq('tier', parseInt(tier));
   if (runId) query = query.eq('triage_run_id', runId);
+  if (archived !== null) query = query.eq('archived', archived === 'true');
 
-  const { data, error } = await query.limit(100);
+  const { data, error } = await query.limit(limit ? parseInt(limit) : 100);
 
   if (error) {
     return NextResponse.json(

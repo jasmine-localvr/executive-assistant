@@ -47,6 +47,12 @@ export default function NavBar() {
                 EA
               </Link>
               <Link
+                href="/cleanup"
+                className="text-dark-gray transition-colors hover:text-charcoal"
+              >
+                Cleanup
+              </Link>
+              <Link
                 href="/settings"
                 className="text-dark-gray transition-colors hover:text-charcoal"
               >

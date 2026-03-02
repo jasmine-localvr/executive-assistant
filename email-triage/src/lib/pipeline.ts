@@ -17,13 +17,14 @@ interface PipelineOptions {
   emailCount?: number;
   dryRun?: boolean;
   skipDigest?: boolean;
+  cleanupMode?: boolean;
 }
 
 export async function runTriagePipeline(
   teamMemberId: string,
   options: PipelineOptions = {}
 ): Promise<PipelineRunResult> {
-  const { emailCount = 20, dryRun = false, skipDigest = false } = options;
+  const { emailCount = 20, dryRun = false, skipDigest = false, cleanupMode = false } = options;
 
   // ── Setup ──
   const { data: member, error: memberError } = await supabase
@@ -354,7 +355,7 @@ export async function runTriagePipeline(
         }
       }
 
-      // ── Tier 3: Label only (keep in inbox, keep unread) + Draft if needs_reply ──
+      // ── Tier 3: Normal = label only; Cleanup = archive+label+markRead ──
       const { data: t3Emails } = await supabase
         .from('classified_emails')
         .select('*')
@@ -365,18 +366,30 @@ export async function runTriagePipeline(
         try {
           const labelId = await cachedEnsureLabel(member as TeamMember, 'Tier 3');
           await addLabel(member as TeamMember, email.gmail_message_id, labelId);
-          await log('success', 'archive', `T3 labeled: ${email.subject?.slice(0, 60)}`);
+
+          if (cleanupMode) {
+            await archiveMessage(member as TeamMember, email.gmail_message_id);
+            await markAsRead(member as TeamMember, email.gmail_message_id);
+            await supabase
+              .from('classified_emails')
+              .update({ archived: true })
+              .eq('id', email.id);
+            archivedCount++;
+            await log('success', 'archive', `T3 cleanup-archived: ${email.subject?.slice(0, 60)}`);
+          } else {
+            await log('success', 'archive', `T3 labeled: ${email.subject?.slice(0, 60)}`);
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           await log('error', 'archive', `T3 failed "${email.subject?.slice(0, 40)}": ${msg}`);
         }
 
-        if (email.needs_reply && member.feature_inbox_drafting) {
+        if (!cleanupMode && email.needs_reply && member.feature_inbox_drafting) {
           await createDraftForEmail(email as ClassifiedEmail);
         }
       }
 
-      // ── Tier 4: Label (keep in inbox, keep unread) + Draft if needs_reply ──
+      // ── Tier 4: Normal = label only; Cleanup = label+markRead (for user review in app) ──
       const { data: t4Emails } = await supabase
         .from('classified_emails')
         .select('*')
@@ -387,13 +400,19 @@ export async function runTriagePipeline(
         try {
           const labelId = await cachedEnsureLabel(member as TeamMember, 'Tier 4');
           await addLabel(member as TeamMember, email.gmail_message_id, labelId);
-          await log('success', 'archive', `T4 labeled: ${email.subject?.slice(0, 60)}`);
+
+          if (cleanupMode) {
+            await markAsRead(member as TeamMember, email.gmail_message_id);
+            await log('success', 'archive', `T4 for review: ${email.subject?.slice(0, 60)}`);
+          } else {
+            await log('success', 'archive', `T4 labeled: ${email.subject?.slice(0, 60)}`);
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           await log('error', 'archive', `T4 failed "${email.subject?.slice(0, 40)}": ${msg}`);
         }
 
-        if (email.needs_reply && member.feature_inbox_drafting) {
+        if (!cleanupMode && email.needs_reply && member.feature_inbox_drafting) {
           await createDraftForEmail(email as ClassifiedEmail);
         }
       }
@@ -401,8 +420,10 @@ export async function runTriagePipeline(
       // ═══════════════════════════════════════════
       // PHASE 4: CONSOLIDATED SLACK DIGEST
       // ═══════════════════════════════════════════
-      if (skipDigest) {
-        await log('info', 'digest', 'Skipping Slack digest (instant processing mode)');
+      if (cleanupMode || skipDigest) {
+        await log('info', 'digest', cleanupMode
+          ? 'Skipping Slack digest (cleanup mode)'
+          : 'Skipping Slack digest (instant processing mode)');
       } else if (member.slack_user_id) {
         const { data: allRunEmails } = await supabase
           .from('classified_emails')
