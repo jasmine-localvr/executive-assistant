@@ -18,9 +18,60 @@ function getSlackClient() {
   return new WebClient(process.env.SLACK_BOT_TOKEN);
 }
 
+/**
+ * Convert standard markdown to Slack's mrkdwn format.
+ * Handles bold, italic, headers, links, and strikethrough.
+ */
+function markdownToSlack(text: string): string {
+  return text
+    // Headers: ## Heading → *Heading*
+    .replace(/^#{1,6}\s+(.+)$/gm, '*$1*')
+    // Bold+italic: ***text*** → *_text_*  (must come before bold and italic)
+    .replace(/\*{3}([^*]+)\*{3}/g, '*_$1_*')
+    // Bold: **text** → *text*
+    .replace(/\*{2}([^*]+)\*{2}/g, '*$1*')
+    // Italic: *text* → _text_  (single asterisk only, not inside bold)
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '_$1_')
+    // Links: [text](url) → <url|text>
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<$2|$1>')
+    // Strikethrough: ~~text~~ → ~text~
+    .replace(/~~([^~]+)~~/g, '~$1~');
+}
+
 async function sendSlackMessage(channelId: string, text: string): Promise<void> {
   const client = getSlackClient();
-  await client.chat.postMessage({ channel: channelId, text });
+  const slackText = markdownToSlack(text);
+
+  // Slack section blocks have a 3000-char limit; split long messages
+  const MAX_BLOCK_LEN = 3000;
+  if (slackText.length <= MAX_BLOCK_LEN) {
+    await client.chat.postMessage({
+      channel: channelId,
+      text: slackText,
+      blocks: [{ type: 'section', text: { type: 'mrkdwn', text: slackText } }],
+    });
+  } else {
+    // Split on paragraph boundaries
+    const chunks: string[] = [];
+    let remaining = slackText;
+    while (remaining.length > MAX_BLOCK_LEN) {
+      let splitIdx = remaining.lastIndexOf('\n\n', MAX_BLOCK_LEN);
+      if (splitIdx === -1) splitIdx = remaining.lastIndexOf('\n', MAX_BLOCK_LEN);
+      if (splitIdx === -1) splitIdx = MAX_BLOCK_LEN;
+      chunks.push(remaining.slice(0, splitIdx));
+      remaining = remaining.slice(splitIdx).replace(/^\n+/, '');
+    }
+    if (remaining) chunks.push(remaining);
+
+    await client.chat.postMessage({
+      channel: channelId,
+      text: slackText,
+      blocks: chunks.map((chunk) => ({
+        type: 'section' as const,
+        text: { type: 'mrkdwn' as const, text: chunk },
+      })),
+    });
+  }
 }
 
 /** Load the full team member record (needed by the agent for OAuth tokens, etc.) */

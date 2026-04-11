@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 const FEATURE_COLUMNS =
-  'id, name, email, feature_inbox_management, feature_inbox_summaries, summary_weekly_schedule, summary_daily_summaries, summary_update_frequency, feature_inbox_drafting, email_style, feature_calendar_scheduling, scheduling_link, ea_custom_instructions, sms_phone_number';
+  'id, name, email, feature_inbox_management, feature_inbox_summaries, summary_weekly_schedule, summary_daily_summaries, summary_update_frequency, feature_inbox_drafting, email_style, feature_calendar_scheduling, scheduling_link, ea_custom_instructions, sms_phone_number, home_address, work_address, investment_property_addresses';
 
 const ALLOWED_FIELDS = [
   'feature_inbox_management',
@@ -17,6 +17,9 @@ const ALLOWED_FIELDS = [
   'scheduling_link',
   'ea_custom_instructions',
   'sms_phone_number',
+  'home_address',
+  'work_address',
+  'investment_property_addresses',
 ];
 
 export async function GET(
