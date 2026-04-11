@@ -1,6 +1,7 @@
 import { after } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { rsvpToEvent } from '@/lib/calendar';
+import { publishHomeTab } from '@/lib/slack-home';
 import type { TeamMember } from '@/types';
 
 export const maxDuration = 30;
@@ -74,12 +75,14 @@ export async function POST(req: Request) {
 
   const actionId: string = action.action_id ?? '';
 
-  // ── Todo button handlers ──
-  const isTodoComplete = actionId.startsWith('todo_complete_');
+  // ── Todo button handlers (DM and Home tab) ──
+  const isHomeTodoComplete = actionId.startsWith('home_todo_complete_');
+  const isTodoComplete = isHomeTodoComplete || actionId.startsWith('todo_complete_');
   const isTodoSnooze = actionId.startsWith('todo_snooze_');
 
   if (isTodoComplete || isTodoSnooze) {
     const responseUrl: string | undefined = payload.response_url;
+    const slackUserId: string | undefined = payload.user?.id;
 
     after(async () => {
       try {
@@ -94,7 +97,7 @@ export async function POST(req: Request) {
             })
             .eq('id', todoId);
 
-          if (responseUrl) {
+          if (!isHomeTodoComplete && responseUrl) {
             await fetch(responseUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -129,6 +132,20 @@ export async function POST(req: Request) {
                 text: `⏸️ Snoozed for ${label}`,
               }),
             });
+          }
+        }
+
+        // Refresh the Home tab so the completed/snoozed todo disappears
+        if (slackUserId) {
+          const { data: member } = await supabase
+            .from('team_members')
+            .select('id')
+            .eq('slack_user_id', slackUserId)
+            .eq('is_active', true)
+            .single();
+
+          if (member) {
+            await publishHomeTab(slackUserId, member.id);
           }
         }
       } catch (err) {

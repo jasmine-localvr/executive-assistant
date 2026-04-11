@@ -8,6 +8,7 @@ import {
 } from '@/lib/slack-feedback';
 import { runAgent } from '@/lib/agent';
 import { supabase } from '@/lib/supabase';
+import { publishHomeTab } from '@/lib/slack-home';
 import { WebClient } from '@slack/web-api';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { TeamMember } from '@/types';
@@ -184,6 +185,22 @@ export async function POST(req: Request) {
   // Handle Slack URL verification challenge
   if (body.type === 'url_verification') {
     return NextResponse.json({ challenge: body.challenge });
+  }
+
+  // ── App Home tab ──
+  if (body.event?.type === 'app_home_opened') {
+    const homeUserId: string = body.event.user;
+    const member = await getTeamMemberBySlackId(homeUserId);
+    if (member) {
+      after(async () => {
+        try {
+          await publishHomeTab(homeUserId, member.id);
+        } catch (err) {
+          console.error('[Home] Failed to publish Home tab:', err);
+        }
+      });
+    }
+    return new Response('OK', { status: 200 });
   }
 
   // Only process DM messages to the bot
