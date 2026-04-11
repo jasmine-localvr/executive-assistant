@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Playwright uses child_process.spawn and native Node APIs that break when bundled by Turbopack
+  serverExternalPackages: ['playwright'],
 };
 
 export default nextConfig;
