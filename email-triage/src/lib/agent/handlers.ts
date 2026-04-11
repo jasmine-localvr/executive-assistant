@@ -374,12 +374,29 @@ async function handleCalendarCreate(
     email,
   }));
 
+  const isAllDay = !!input.all_day;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const requestBody: any = {
     summary: input.title as string,
-    start: { dateTime: input.start_time as string, timeZone: 'America/Denver' },
-    end: { dateTime: input.end_time as string, timeZone: 'America/Denver' },
   };
+
+  if (isAllDay) {
+    const startDate = input.start_date as string;
+    // Google Calendar all-day end date is exclusive, so a single-day event
+    // on April 14 needs end_date = April 15. Default to day-after-start.
+    let endDate = input.end_date as string | undefined;
+    if (!endDate) {
+      const d = new Date(startDate + 'T12:00:00'); // noon to avoid DST edge cases
+      d.setDate(d.getDate() + 1);
+      endDate = d.toISOString().split('T')[0];
+    }
+    requestBody.start = { date: startDate };
+    requestBody.end = { date: endDate };
+  } else {
+    requestBody.start = { dateTime: input.start_time as string, timeZone: 'America/Denver' };
+    requestBody.end = { dateTime: input.end_time as string, timeZone: 'America/Denver' };
+  }
 
   if (input.description) requestBody.description = input.description as string;
   if (input.location) requestBody.location = input.location as string;
@@ -850,13 +867,24 @@ async function handleBrowserNavigate(
   member: TeamMember
 ): Promise<ToolResult> {
   const url = input.url as string;
+
+  console.log('[browser] Launching session...');
+  const t0 = Date.now();
   const page = await getOrCreateSession(member.id);
+  console.log(`[browser] Session ready in ${Date.now() - t0}ms`);
 
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-  // Brief extra wait for JS rendering — don't wait for networkidle (hangs on busy sites)
-  await page.waitForTimeout(2000);
+  console.log(`[browser] Navigating to ${url}...`);
+  const t1 = Date.now();
+  await page.goto(url, { waitUntil: 'commit', timeout: 15000 });
+  console.log(`[browser] Page committed in ${Date.now() - t1}ms`);
+  // Brief wait for initial render
+  await page.waitForTimeout(1500);
 
+  console.log('[browser] Taking snapshot...');
+  const t2 = Date.now();
   const snapshot = await getPageSnapshot(page);
+  console.log(`[browser] Snapshot in ${Date.now() - t2}ms (${snapshot.elements.length} elements)`);
+
   return {
     success: true,
     data: {

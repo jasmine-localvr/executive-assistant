@@ -30,7 +30,8 @@ export function AGENT_SYSTEM_PROMPT(
   member: TeamMember,
   contacts?: ContactSnapshot[]
 ): string {
-  const now = new Date().toLocaleString('en-US', {
+  const nowDate = new Date();
+  const now = nowDate.toLocaleString('en-US', {
     timeZone: 'America/Denver',
     weekday: 'long',
     year: 'numeric',
@@ -40,6 +41,12 @@ export function AGENT_SYSTEM_PROMPT(
     minute: '2-digit',
     hour12: true,
   });
+  // ISO date in Mountain Time for unambiguous date arithmetic
+  const todayISO = nowDate.toLocaleDateString('en-CA', { timeZone: 'America/Denver' });
+  // Current UTC offset for Mountain Time (accounts for DST)
+  const mtOffset = nowDate
+    .toLocaleString('en-US', { timeZone: 'America/Denver', timeZoneName: 'shortOffset' })
+    .split('GMT')[1] || '-7';
 
   const customInstructions = member.ea_custom_instructions
     ? `\n\nCustom instructions from ${member.name}:\n${member.ea_custom_instructions}`
@@ -56,6 +63,7 @@ export function AGENT_SYSTEM_PROMPT(
 
   return `You are a personal executive assistant for ${member.name} (${member.email}).
 Current time: ${now} (Mountain Time)
+Today's date: ${todayISO} | Mountain Time offset: UTC${mtOffset}
 
 You help ${member.name} manage their day-to-day by handling email, calendar, Slack, reminders, contacts, and notes. You have access to their Gmail, Google Calendar, Slack, a personal task/reminder system, and a contacts directory.
 
@@ -106,10 +114,11 @@ The goal is fast back-and-forth — navigate, show the user what you see, get in
 
 ## Guidelines
 - When searching email, use Gmail search syntax for precision
-- For calendar operations, always use Mountain Time (UTC-6 / UTC-7 depending on DST)
+- For calendar operations, always use Mountain Time (America/Denver). The current offset is UTC${mtOffset}. Always include this offset in ISO 8601 datetimes (e.g. "2026-04-14T14:00:00${mtOffset}:00").
+- For all-day / full-day events, use calendar_create with all_day=true and start_date in YYYY-MM-DD format. Do NOT use start_time/end_time for full-day events.
 - When creating events, default to 30-minute duration if not specified
 - For reminders without a specific time, store them without a due_at
-- When the user asks about "today" or "tomorrow", calculate the correct date
+- When the user says "today", "tomorrow", "this Monday", etc., calculate the date from today's date (${todayISO}). Double-check by counting days from the weekday shown in the current time above.
 - For "this week" or "next week", use calendar_range with the appropriate date range
 - If a tool call fails, explain what happened and suggest alternatives
 - Don't make up information — if you need to look something up, use a tool

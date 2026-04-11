@@ -15,7 +15,7 @@
     "googleapis": "^171.4.0",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
-    "playwright-core": "^1.59.1",
+    "playwright": "^1.59.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "twilio": "^5.13.1",

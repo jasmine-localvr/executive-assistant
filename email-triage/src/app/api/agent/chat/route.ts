@@ -93,6 +93,12 @@ export async function POST(request: NextRequest) {
 
       // Fire-and-forget: run agent in background while response streams to client
       const teamMemberId = session.user.teamMemberId;
+
+      // Heartbeat every 5s to keep the connection alive during long browser ops
+      const heartbeat = setInterval(() => {
+        writer.write(encoder.encode(`: heartbeat\n\n`)).catch(() => {});
+      }, 5000);
+
       (async () => {
         try {
           const result = await runAgent(
@@ -146,6 +152,7 @@ export async function POST(request: NextRequest) {
             error: err instanceof Error ? err.message : 'Agent failed',
           });
         } finally {
+          clearInterval(heartbeat);
           await writer.close();
         }
       })();

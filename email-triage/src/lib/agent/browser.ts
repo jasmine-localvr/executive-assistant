@@ -1,4 +1,9 @@
-import { chromium, type Browser, type Page, type BrowserContext } from 'playwright-core';
+import type { Browser, Page, BrowserContext } from 'playwright';
+
+// Dynamic require to bypass Turbopack's static analysis — playwright uses
+// child_process.spawn internally which breaks when bundled
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { chromium } = require(/* webpackIgnore: true */ 'playwright') as typeof import('playwright');
 
 // ─── Types ───
 
@@ -61,17 +66,21 @@ export async function getOrCreateSession(sessionId: string): Promise<Page> {
 
   let browser: Browser;
 
-  if (process.env.BROWSER_WS_ENDPOINT) {
+  const wsEndpoint = (process.env.BROWSER_WS_ENDPOINT || '').trim();
+  if (wsEndpoint && wsEndpoint.startsWith('ws')) {
     // Production: connect to a remote browser service (Browserbase, Browserless, etc.)
-    browser = await chromium.connect(process.env.BROWSER_WS_ENDPOINT);
+    console.log('[browser] Connecting to remote:', wsEndpoint.slice(0, 50));
+    browser = await chromium.connect(wsEndpoint);
   } else {
     // Development: launch local Chromium
-    // Requires Chromium installed — run `npx playwright install chromium` once
+    console.log('[browser] Launching local Chromium...');
     browser = await chromium.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      timeout: 10000,
     });
   }
+  console.log('[browser] Browser ready');
 
   const context = await browser.newContext({
     viewport: { width: 1280, height: 720 },

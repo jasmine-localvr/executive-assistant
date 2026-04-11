@@ -4,7 +4,7 @@ import authConfig from '@/lib/auth.config';
 const { auth } = NextAuth(authConfig);
 import { NextResponse } from 'next/server';
 
-const publicPaths = ['/login', '/api/auth', '/api/cron', '/api/ea/webhook', '/api/gmail/webhook', '/api/slack', '/api/agent/stream-test'];
+const publicPaths = ['/login', '/api/auth', '/api/cron', '/api/ea/webhook', '/api/gmail/webhook', '/api/slack'];
 
 function isPublic(pathname: string) {
   return publicPaths.some((p) => pathname.startsWith(p));

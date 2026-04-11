@@ -118,18 +118,35 @@ export const agentTools: Anthropic.Tool[] = [
   {
     name: 'calendar_create',
     description:
-      'Create a new calendar event. Use when the user wants to schedule a meeting, block time, or add an event. Supports attendees and video conferencing.',
+      'Create a new calendar event. Use when the user wants to schedule a meeting, block time, or add an event. Supports attendees, video conferencing, and all-day events.',
     input_schema: {
       type: 'object' as const,
       properties: {
         title: { type: 'string', description: 'Event title/summary' },
+        all_day: {
+          type: 'boolean',
+          description:
+            'Set to true for all-day / full-day events. When true, provide start_date (and optionally end_date) instead of start_time/end_time.',
+        },
+        start_date: {
+          type: 'string',
+          description:
+            'Date in YYYY-MM-DD format. Required for all-day events (all_day=true). The event spans this entire day.',
+        },
+        end_date: {
+          type: 'string',
+          description:
+            'End date in YYYY-MM-DD for multi-day all-day events. The end date is EXCLUSIVE (e.g. for a single-day event on April 14, set start_date="2026-04-14" and end_date="2026-04-15"). Defaults to the day after start_date if omitted.',
+        },
         start_time: {
           type: 'string',
-          description: 'Start time in ISO 8601 format (e.g. "2026-04-10T14:00:00-06:00")',
+          description:
+            'Start time in ISO 8601 format with Mountain Time offset (e.g. "2026-04-10T14:00:00-06:00"). Required for timed events (all_day=false or omitted).',
         },
         end_time: {
           type: 'string',
-          description: 'End time in ISO 8601 format',
+          description:
+            'End time in ISO 8601 format with Mountain Time offset. Required for timed events.',
         },
         description: { type: 'string', description: 'Event description/notes, optional' },
         location: { type: 'string', description: 'Location or meeting room, optional' },
@@ -143,7 +160,7 @@ export const agentTools: Anthropic.Tool[] = [
           description: 'Whether to add a Google Meet link (default false)',
         },
       },
-      required: ['title', 'start_time', 'end_time'],
+      required: ['title'],
     },
   },
   {
