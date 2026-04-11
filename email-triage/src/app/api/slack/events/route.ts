@@ -1,15 +1,18 @@
 import { NextResponse, after } from 'next/server';
 import { getTeamMemberBySlackId } from '@/lib/override-rules';
 import {
-  handleTierCorrection,
   handleShowRules,
   handleDeleteRule,
   handleTriageNow,
   handleCalendarPrep,
 } from '@/lib/slack-feedback';
+import { runAgent } from '@/lib/agent';
+import { supabase } from '@/lib/supabase';
 import { WebClient } from '@slack/web-api';
+import type Anthropic from '@anthropic-ai/sdk';
+import type { TeamMember } from '@/types';
 
-export const maxDuration = 300; // 5 minutes — triage pipeline runs in after()
+export const maxDuration = 300; // 5 minutes — agent + pipeline runs in after()
 
 function getSlackClient() {
   return new WebClient(process.env.SLACK_BOT_TOKEN);
@@ -18,6 +21,110 @@ function getSlackClient() {
 async function sendSlackMessage(channelId: string, text: string): Promise<void> {
   const client = getSlackClient();
   await client.chat.postMessage({ channel: channelId, text });
+}
+
+/** Load the full team member record (needed by the agent for OAuth tokens, etc.) */
+async function getFullMember(memberId: string): Promise<TeamMember | null> {
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('*')
+    .eq('id', memberId)
+    .single();
+
+  if (error || !data) return null;
+  return data as TeamMember;
+}
+
+/** Load or create a Slack conversation for persistent context across DMs. */
+async function getSlackConversation(
+  memberId: string
+): Promise<{ id: string; messages: Anthropic.MessageParam[] }> {
+  // Look for the most recent Slack conversation (title starts with "[slack]")
+  const { data: existing } = await supabase
+    .from('agent_conversations')
+    .select('id, messages')
+    .eq('team_member_id', memberId)
+    .like('title', '[slack]%')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (existing) {
+    return {
+      id: existing.id,
+      messages: (existing.messages ?? []) as Anthropic.MessageParam[],
+    };
+  }
+
+  // Create a new Slack conversation
+  const { data: newConv } = await supabase
+    .from('agent_conversations')
+    .insert({
+      team_member_id: memberId,
+      title: '[slack] EA conversation',
+      messages: [],
+      message_count: 0,
+    })
+    .select('id')
+    .single();
+
+  return { id: newConv?.id ?? '', messages: [] };
+}
+
+/** Keep only the last N message pairs to avoid unbounded context growth. */
+function trimHistory(
+  messages: Anthropic.MessageParam[],
+  maxPairs: number = 20
+): Anthropic.MessageParam[] {
+  // Each user+assistant exchange is roughly 2 entries, but tool rounds add more.
+  // Keep the last maxPairs * 2 entries.
+  const maxEntries = maxPairs * 2;
+  if (messages.length <= maxEntries) return messages;
+  return messages.slice(-maxEntries);
+}
+
+/** Run the agent and send its response back to the Slack DM. */
+async function handleAgentMessage(
+  channelId: string,
+  memberId: string,
+  messageText: string
+): Promise<void> {
+  const member = await getFullMember(memberId);
+  if (!member) {
+    await sendSlackMessage(channelId, 'Could not load your account. Please try again.');
+    return;
+  }
+
+  try {
+    // Load conversation history for context continuity
+    const conv = await getSlackConversation(memberId);
+    const history = trimHistory(conv.messages);
+
+    const result = await runAgent(member, history, messageText);
+
+    // Save updated conversation
+    await supabase
+      .from('agent_conversations')
+      .update({
+        messages: trimHistory(result.messages),
+        message_count: result.messages.length,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conv.id);
+
+    if (result.response) {
+      await sendSlackMessage(channelId, result.response);
+    } else {
+      await sendSlackMessage(channelId, "I processed your request but didn't have anything to say back.");
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[Agent] Slack handler error for member ${memberId}:`, msg);
+    await sendSlackMessage(
+      channelId,
+      `Something went wrong: ${msg}`
+    );
+  }
 }
 
 export async function POST(req: Request) {
@@ -59,7 +166,8 @@ export async function POST(req: Request) {
 
   const trimmed = messageText.toLowerCase().trim();
 
-  // Handle special commands
+  // ── Fast-path commands (no agent needed) ──
+
   if (trimmed === 'show rules') {
     await handleShowRules(channelId, member.id);
     return new Response('OK', { status: 200 });
@@ -78,30 +186,33 @@ export async function POST(req: Request) {
     return new Response('OK', { status: 200 });
   }
 
-  if (trimmed === 'prep' || trimmed.startsWith('prep ') ||
-      trimmed === 'calendar' || trimmed.startsWith('calendar ') ||
-      trimmed === 'agenda' || trimmed.startsWith('agenda ')) {
-    const dateText = trimmed.replace(/^(prep|calendar|agenda)\s*/, '').trim();
-    await handleCalendarPrep(channelId, member.id, userSlackId, dateText);
-    return new Response('OK', { status: 200 });
-  }
-
   if (trimmed === 'help') {
     await sendSlackMessage(
       channelId,
-      '*Available commands:*\n\n' +
-        '\u2022 *triage* — Run inbox triage now (classify, archive, draft replies, send summary)\n' +
-        '\u2022 *prep [day]* — Get your calendar for today, tomorrow, Monday, next Friday, etc.\n' +
-        '\u2022 *show rules* — List your tier override rules\n' +
-        '\u2022 *delete rule [number]* — Remove an override rule\n' +
-        '\u2022 *help* — Show this message\n\n' +
-        'You can also send tier corrections like "Roku emails \u2192 Tier 1" and I\'ll create a rule for you.'
+      '*I\'m your EA — just ask me anything!*\n\n' +
+        'Some things I can do:\n' +
+        '\u2022 Check your calendar — "what\'s on my schedule today?" or "what does my week look like?"\n' +
+        '\u2022 Search email — "find the invoice from Acme"\n' +
+        '\u2022 Draft & send emails — "draft a reply to Sarah about the Q2 report"\n' +
+        '\u2022 Book appointments — "book my annual physical with Dr. Kim"\n' +
+        '\u2022 Manage contacts — "add Dr. Sarah Kim as my doctor"\n' +
+        '\u2022 Set reminders — "remind me to call John tomorrow at 2pm"\n' +
+        '\u2022 Manage todos — "what\'s on my todo list?" or "prioritize my tasks"\n' +
+        '\u2022 Send Slack messages — "message #general that the meeting is moved"\n' +
+        '\u2022 Find free time — "when am I free this afternoon?"\n\n' +
+        '*Quick commands:*\n' +
+        '\u2022 *triage* — Run inbox triage now\n' +
+        '\u2022 *show rules* / *delete rule [#]* — Manage tier overrides\n\n' +
+        'Or just tell me what you need in plain English.'
     );
     return new Response('OK', { status: 200 });
   }
 
-  // Parse the correction with Claude
-  await handleTierCorrection(channelId, member.id, messageText);
+  // ── Everything else goes to the agent ──
+  // Respond immediately so Slack doesn't timeout, then run agent in background.
+  after(async () => {
+    await handleAgentMessage(channelId, member.id, messageText);
+  });
 
   return new Response('OK', { status: 200 });
 }

@@ -1,5 +1,5 @@
 import { WebClient } from '@slack/web-api';
-import type { ClassifiedEmail } from '@/types';
+import type { ClassifiedEmail, Todo } from '@/types';
 import type { CalendarEvent } from './calendar';
 
 function getClient() {
@@ -360,5 +360,168 @@ export async function sendCalendarSummary(
     channel: channelId,
     text: fallback,
     blocks,
+  });
+}
+
+// ─── Todo Reminders ───
+
+function priorityEmoji(priority: string): string {
+  switch (priority) {
+    case 'high': return '🔴';
+    case 'medium': return '🟡';
+    default: return '🟢';
+  }
+}
+
+function formatDueDate(dueAt: string): string {
+  const due = new Date(dueAt);
+  const now = new Date();
+  const diffMs = due.getTime() - now.getTime();
+  const diffHours = diffMs / (1000 * 60 * 60);
+
+  if (diffHours < -24) {
+    const days = Math.floor(Math.abs(diffHours) / 24);
+    return `⚠️ ${days} day${days === 1 ? '' : 's'} overdue`;
+  }
+  if (diffHours < 0) {
+    return '⚠️ Overdue';
+  }
+  if (diffHours < 1) {
+    return `Due in ${Math.max(1, Math.round(diffMs / 60000))} min`;
+  }
+  if (diffHours < 24) {
+    return `Due in ${Math.round(diffHours)} hour${Math.round(diffHours) === 1 ? '' : 's'}`;
+  }
+
+  return `Due ${due.toLocaleDateString('en-US', {
+    timeZone: 'America/Denver',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`;
+}
+
+export async function sendTodoReminders(
+  slackUserId: string,
+  todos: Todo[]
+): Promise<void> {
+  if (todos.length === 0) return;
+
+  const client = getClient();
+  const conversation = await client.conversations.open({ users: slackUserId });
+  const channelId = conversation.channel?.id;
+  if (!channelId) throw new Error('Failed to open DM channel');
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const blocks: any[] = [];
+
+  const overdue = todos.filter((t) => t.due_at && new Date(t.due_at) < new Date());
+  const upcoming = todos.filter((t) => t.due_at && new Date(t.due_at) >= new Date());
+
+  blocks.push({
+    type: 'section',
+    text: {
+      type: 'mrkdwn',
+      text: `📋 *Todo Reminders* — ${todos.length} item${todos.length === 1 ? '' : 's'} need${todos.length === 1 ? 's' : ''} attention`,
+    },
+  });
+
+  if (overdue.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*⚠️ Overdue (${overdue.length})*` },
+    });
+
+    for (const todo of overdue) {
+      const dueText = todo.due_at ? formatDueDate(todo.due_at) : '';
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${priorityEmoji(todo.priority)} *${todo.title}*\n${dueText}${todo.description ? `\n${todo.description}` : ''}`,
+        },
+      });
+
+      blocks.push({
+        type: 'actions',
+        block_id: `todo_${todo.id}`,
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '✓ Complete' },
+            style: 'primary',
+            action_id: `todo_complete_${todo.id}`,
+            value: todo.id,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Snooze 1hr' },
+            action_id: `todo_snooze_${todo.id}`,
+            value: `${todo.id}|1`,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Snooze 1d' },
+            action_id: `todo_snooze_day_${todo.id}`,
+            value: `${todo.id}|24`,
+          },
+        ],
+      });
+    }
+  }
+
+  if (upcoming.length > 0) {
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*📅 Coming Up (${upcoming.length})*` },
+    });
+
+    for (const todo of upcoming) {
+      const dueText = todo.due_at ? formatDueDate(todo.due_at) : '';
+      blocks.push({
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `${priorityEmoji(todo.priority)} *${todo.title}*\n${dueText}${todo.description ? `\n${todo.description}` : ''}`,
+        },
+      });
+
+      blocks.push({
+        type: 'actions',
+        block_id: `todo_${todo.id}`,
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '✓ Complete' },
+            style: 'primary',
+            action_id: `todo_complete_${todo.id}`,
+            value: todo.id,
+          },
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: 'Snooze 1hr' },
+            action_id: `todo_snooze_${todo.id}`,
+            value: `${todo.id}|1`,
+          },
+        ],
+      });
+    }
+  }
+
+  // Truncate blocks
+  const maxBlocks = 50;
+  const finalBlocks = blocks.length > maxBlocks
+    ? [
+        ...blocks.slice(0, maxBlocks - 1),
+        { type: 'context', elements: [{ type: 'mrkdwn', text: '_…see dashboard for full list_' }] },
+      ]
+    : blocks;
+
+  await client.chat.postMessage({
+    channel: channelId,
+    text: `📋 ${todos.length} todo reminder${todos.length === 1 ? '' : 's'}`,
+    blocks: finalBlocks,
   });
 }

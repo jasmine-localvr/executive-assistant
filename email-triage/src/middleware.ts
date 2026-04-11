@@ -4,7 +4,7 @@ import authConfig from '@/lib/auth.config';
 const { auth } = NextAuth(authConfig);
 import { NextResponse } from 'next/server';
 
-const publicPaths = ['/login', '/api/auth', '/api/cron', '/api/ea/webhook', '/api/gmail/webhook', '/api/slack'];
+const publicPaths = ['/login', '/api/auth', '/api/cron', '/api/ea/webhook', '/api/gmail/webhook', '/api/slack', '/api/agent/stream-test'];
 
 function isPublic(pathname: string) {
   return publicPaths.some((p) => pathname.startsWith(p));
@@ -47,7 +47,7 @@ export default auth((req) => {
 
 export const config = {
   matcher: [
-    // Match all routes except static files and Next.js internals
-    '/((?!_next/static|_next/image|favicon.ico).*)',
+    // Match all routes except static files, Next.js internals, and the streaming agent endpoint
+    '/((?!_next/static|_next/image|favicon.ico|api/agent/chat).*)',
   ],
 };

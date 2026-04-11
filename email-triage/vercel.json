@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/calendar-summary",
       "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/todo-reminders",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
