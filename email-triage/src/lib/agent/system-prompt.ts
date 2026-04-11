@@ -48,6 +48,19 @@ export function AGENT_SYSTEM_PROMPT(
     .toLocaleString('en-US', { timeZone: 'America/Denver', timeZoneName: 'shortOffset' })
     .split('GMT')[1] || '-7';
 
+  // Pre-compute upcoming 14-day date reference so the agent never has to
+  // do weekday arithmetic — it can just look up "Monday" → exact date.
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dateRefLines: string[] = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(nowDate.toLocaleString('en-US', { timeZone: 'America/Denver' }));
+    d.setDate(d.getDate() + i);
+    const iso = d.toLocaleDateString('en-CA');
+    const dayName = dayNames[d.getDay()];
+    const label = i === 0 ? ' (today)' : i === 1 ? ' (tomorrow)' : '';
+    dateRefLines.push(`- ${dayName}, ${iso}${label}`);
+  }
+
   const customInstructions = member.ea_custom_instructions
     ? `\n\nCustom instructions from ${member.name}:\n${member.ea_custom_instructions}`
     : '';
@@ -81,6 +94,9 @@ export function AGENT_SYSTEM_PROMPT(
   return `You are a personal executive assistant for ${member.name} (${member.email}).
 Current time: ${now} (Mountain Time)
 Today's date: ${todayISO} | Mountain Time offset: UTC${mtOffset}
+
+## Upcoming dates (use this table — do NOT calculate dates yourself)
+${dateRefLines.join('\n')}
 
 You help ${member.name} manage their day-to-day by handling email, calendar, Slack, reminders, contacts, and notes. You have access to their Gmail, Google Calendar, Slack, a personal task/reminder system, and a contacts directory.
 
@@ -149,11 +165,11 @@ The goal is fast back-and-forth — navigate, show the user what you see, get in
 
 ## Guidelines
 - When searching email, use Gmail search syntax for precision
-- For calendar operations, always use Mountain Time (America/Denver). The current offset is UTC${mtOffset}. Always include this offset in ISO 8601 datetimes (e.g. "2026-04-14T14:00:00${mtOffset}:00").
+- For calendar operations, always use Mountain Time (America/Denver). The current offset is UTC${mtOffset}. Always include this offset in ISO 8601 datetimes (e.g. "${todayISO}T14:00:00${mtOffset}:00").
 - For all-day / full-day events, use calendar_create with all_day=true and start_date in YYYY-MM-DD format. Do NOT use start_time/end_time for full-day events.
 - When creating events, default to 30-minute duration if not specified
 - For reminders without a specific time, store them without a due_at
-- When the user says "today", "tomorrow", "this Monday", etc., calculate the date from today's date (${todayISO}). Double-check by counting days from the weekday shown in the current time above.
+- When the user says "today", "tomorrow", "this Monday", etc., look up the exact date in the "Upcoming dates" table above. NEVER compute dates by mental arithmetic — always use the table.
 - For "this week" or "next week", use calendar_range with the appropriate date range
 - If a tool call fails, explain what happened and suggest alternatives
 - Don't make up information — if you need to look something up, use a tool
