@@ -1,9 +1,13 @@
 import type { Browser, Page, BrowserContext } from 'playwright';
 
-// Dynamic require to bypass Turbopack's static analysis — playwright uses
-// child_process.spawn internally which breaks when bundled
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { chromium } = require(/* webpackIgnore: true */ 'playwright') as typeof import('playwright');
+// Lazy-load Playwright so the module doesn't crash at import time in environments
+// where Playwright isn't available (e.g. Vercel serverless functions that don't
+// use browser tools). Only loads when a browser session is actually created.
+function getChromium() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { chromium } = require(/* webpackIgnore: true */ 'playwright') as typeof import('playwright');
+  return chromium;
+}
 
 // ─── Types ───
 
@@ -70,11 +74,11 @@ export async function getOrCreateSession(sessionId: string): Promise<Page> {
   if (wsEndpoint && wsEndpoint.startsWith('ws')) {
     // Production: connect to a remote browser service (Browserbase, Browserless, etc.)
     console.log('[browser] Connecting to remote:', wsEndpoint.slice(0, 50));
-    browser = await chromium.connect(wsEndpoint);
+    browser = await getChromium().connect(wsEndpoint);
   } else {
     // Development: launch local Chromium
     console.log('[browser] Launching local Chromium...');
-    browser = await chromium.launch({
+    browser = await getChromium().launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
       timeout: 10000,
