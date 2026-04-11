@@ -268,10 +268,33 @@ export const agentTools: Anthropic.Tool[] = [
         },
         category: {
           type: 'string',
-          enum: ['general', 'work', 'personal', 'errands', 'follow-up'],
-          description: 'Category for organization (default general)',
+          enum: ['work', 'personal', 'properties', 'errands', 'follow-up'],
+          description: 'Category for organization (default work)',
         },
         notes: { type: 'string', description: 'Additional context or notes, optional' },
+        email_thread_id: {
+          type: 'string',
+          description:
+            'Gmail thread ID to link this todo to an email conversation. Use when creating a todo from an email context (e.g. "schedule dentist appointment" after reading an email about it).',
+        },
+        email_message_id: {
+          type: 'string',
+          description: 'Gmail message ID of the specific email that triggered this todo.',
+        },
+        email_subject: {
+          type: 'string',
+          description: 'Subject line of the linked email, for quick reference.',
+        },
+        email_from: {
+          type: 'string',
+          description: 'Sender email address of the linked email.',
+        },
+        email_status: {
+          type: 'string',
+          enum: ['awaiting_reply', 'draft_ready', 'scheduled', 'resolved'],
+          description:
+            'Current status of the email conversation. Set to "awaiting_reply" when you\'ve sent an email and are waiting for a response, "draft_ready" when a draft has been created, "scheduled" when an appointment/meeting has been scheduled, "resolved" when the email thread is complete.',
+        },
       },
       required: ['title'],
     },
@@ -319,6 +342,175 @@ export const agentTools: Anthropic.Tool[] = [
       type: 'object' as const,
       properties: {},
       required: [],
+    },
+  },
+
+  // ── Email-Todo Linking Tools ──
+  {
+    name: 'email_check_replies',
+    description:
+      'Check for new replies on email threads linked to active todos. Use when the user asks "any updates on my emails?", "did the dentist reply?", or to proactively check on pending email conversations. Returns threads that have new messages since the last check.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        reminder_id: {
+          type: 'string',
+          description:
+            'Optional: check a specific todo\'s linked email thread. If omitted, checks ALL todos with email_status = "awaiting_reply".',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'email_log_action',
+    description:
+      'Log an action taken on an email thread linked to a todo. Use after sending an email, creating a draft, or when a reply is received — to build up the history of what\'s happened on the conversation. This creates an audit trail the agent can review later.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        reminder_id: {
+          type: 'string',
+          description: 'The todo/reminder ID this action relates to.',
+        },
+        email_thread_id: {
+          type: 'string',
+          description: 'Gmail thread ID.',
+        },
+        gmail_message_id: {
+          type: 'string',
+          description: 'Gmail message ID of the specific message, if applicable.',
+        },
+        action_type: {
+          type: 'string',
+          enum: [
+            'email_sent',
+            'email_drafted',
+            'reply_received',
+            'follow_up_sent',
+            'appointment_confirmed',
+            'appointment_scheduled',
+            'archived',
+            'note',
+          ],
+          description: 'Type of action taken.',
+        },
+        action_summary: {
+          type: 'string',
+          description:
+            'Human-readable summary of what happened (e.g. "Sent appointment request to Dr. Kim\'s office for week of April 27").',
+        },
+        update_email_status: {
+          type: 'string',
+          enum: ['awaiting_reply', 'replied', 'draft_ready', 'scheduled', 'resolved'],
+          description:
+            'Optionally update the linked todo\'s email_status at the same time.',
+        },
+      },
+      required: ['email_thread_id', 'action_type', 'action_summary'],
+    },
+  },
+  {
+    name: 'email_get_history',
+    description:
+      'Get the action history for a todo\'s linked email thread. Shows all actions taken (emails sent, drafts created, replies received, etc.) in chronological order. Use to review what\'s happened on a conversation before taking next steps.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        reminder_id: {
+          type: 'string',
+          description: 'The todo/reminder ID to get email action history for.',
+        },
+        email_thread_id: {
+          type: 'string',
+          description:
+            'Alternatively, look up by Gmail thread ID directly.',
+        },
+      },
+      required: [],
+    },
+  },
+
+  // ── Recurring Todo Tools ──
+  {
+    name: 'recurring_todo_create',
+    description:
+      'Create a recurring scheduled todo that automatically generates tasks on a schedule. Use when the user says things like "remind me every month to give Finley his heartworm pill", "I need an annual vet appointment reminder", "add a recurring task for oil changes every 5000 miles / every 3 months", or any repeating responsibility. Supports daily, weekly, monthly, and yearly recurrence with optional advance notice.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        title: { type: 'string', description: 'What the recurring task is (e.g. "Give Finley heartworm pill")' },
+        description: { type: 'string', description: 'Longer description, optional' },
+        recurrence_type: {
+          type: 'string',
+          enum: ['daily', 'weekly', 'monthly', 'yearly'],
+          description: 'How often it recurs',
+        },
+        recurrence_interval: {
+          type: 'number',
+          description: 'Every N units. E.g. 1 = every month, 3 = every 3 months, 6 = twice a year. Default 1.',
+        },
+        recurrence_day_of_week: {
+          type: 'number',
+          description: 'For weekly: day of week (0=Sunday, 1=Monday, ..., 6=Saturday)',
+        },
+        recurrence_day_of_month: {
+          type: 'number',
+          description: 'For monthly/yearly: day of the month (1-31)',
+        },
+        recurrence_month: {
+          type: 'number',
+          description: 'For yearly: month number (1=January, 12=December)',
+        },
+        advance_notice_days: {
+          type: 'number',
+          description: 'Create the todo this many days before it is due, giving time to prepare. E.g. 30 for a month ahead. Default 0.',
+        },
+        next_due_at: {
+          type: 'string',
+          description: 'First due date in YYYY-MM-DD format. If omitted, computed from today + recurrence.',
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high'],
+          description: 'Priority level (default medium)',
+        },
+        category: {
+          type: 'string',
+          enum: ['work', 'personal', 'properties', 'errands', 'follow-up'],
+          description: 'Category (default personal)',
+        },
+        notes: { type: 'string', description: 'Additional notes, optional' },
+      },
+      required: ['title', 'recurrence_type'],
+    },
+  },
+  {
+    name: 'recurring_todo_list',
+    description:
+      'List the user\'s recurring scheduled todos/responsibilities. Use when the user asks "what are my recurring tasks", "show my scheduled responsibilities", "what repeating reminders do I have", etc.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        include_paused: {
+          type: 'boolean',
+          description: 'Include paused/inactive recurring todos (default false)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'recurring_todo_pause',
+    description:
+      'Pause or resume a recurring todo. Use when the user wants to temporarily stop a recurring task without deleting it.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        recurring_todo_id: { type: 'string', description: 'The recurring todo ID' },
+        pause: { type: 'boolean', description: 'true to pause, false to resume' },
+      },
+      required: ['recurring_todo_id', 'pause'],
     },
   },
 

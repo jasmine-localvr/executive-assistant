@@ -21,6 +21,9 @@ interface FeatureState {
   scheduling_link: string;
   ea_custom_instructions: string;
   sms_phone_number: string;
+  home_address: string;
+  work_address: string;
+  investment_property_addresses: string[];
 }
 
 // ─── Toggle Switch ───
@@ -97,6 +100,9 @@ export default function FeatureSettings() {
   const [draftSchedulingLink, setDraftSchedulingLink] = useState('');
   const [draftCustomInstructions, setDraftCustomInstructions] = useState('');
   const [draftPhoneNumber, setDraftPhoneNumber] = useState('');
+  const [draftHomeAddress, setDraftHomeAddress] = useState('');
+  const [draftWorkAddress, setDraftWorkAddress] = useState('');
+  const [draftInvestmentAddresses, setDraftInvestmentAddresses] = useState<string[]>([]);
   const [analyzingStyle, setAnalyzingStyle] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [draftWeeklySchedule, setDraftWeeklySchedule] = useState<WeeklySchedule>('weekday');
@@ -122,12 +128,18 @@ export default function FeatureSettings() {
           scheduling_link: data.scheduling_link ?? '',
           ea_custom_instructions: data.ea_custom_instructions ?? '',
           sms_phone_number: data.sms_phone_number ?? '',
+          home_address: data.home_address ?? '',
+          work_address: data.work_address ?? '',
+          investment_property_addresses: data.investment_property_addresses ?? [],
         };
         setFeatures(state);
         setDraftEmailStyle(state.email_style);
         setDraftSchedulingLink(state.scheduling_link);
         setDraftCustomInstructions(state.ea_custom_instructions);
         setDraftPhoneNumber(state.sms_phone_number);
+        setDraftHomeAddress(state.home_address);
+        setDraftWorkAddress(state.work_address);
+        setDraftInvestmentAddresses(state.investment_property_addresses);
         setDraftWeeklySchedule(state.summary_weekly_schedule);
         setDraftDailySummaries(state.summary_daily_summaries);
         setDraftUpdateFrequency(state.summary_update_frequency);
@@ -234,6 +246,31 @@ export default function FeatureSettings() {
   async function savePhoneNumber() {
     await patchFeature({ sms_phone_number: draftPhoneNumber });
     showSaved('sms_phone_number');
+  }
+
+  async function saveAddresses() {
+    const filtered = draftInvestmentAddresses.filter((a) => a.trim() !== '');
+    await patchFeature({
+      home_address: draftHomeAddress,
+      work_address: draftWorkAddress,
+      investment_property_addresses: filtered,
+    });
+    setDraftInvestmentAddresses(filtered.length > 0 ? filtered : []);
+    showSaved('addresses');
+  }
+
+  function addInvestmentAddress() {
+    setDraftInvestmentAddresses((prev) => [...prev, '']);
+  }
+
+  function removeInvestmentAddress(index: number) {
+    setDraftInvestmentAddresses((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateInvestmentAddress(index: number, value: string) {
+    setDraftInvestmentAddresses((prev) =>
+      prev.map((a, i) => (i === index ? value : a))
+    );
   }
 
   if (!memberId || loading || !features) {
@@ -497,6 +534,96 @@ export default function FeatureSettings() {
               Save Phone Number
             </button>
             {savedField === 'sms_phone_number' && (
+              <span className="text-xs font-medium text-success">Saved</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Personal Addresses */}
+      <div className="rounded-md border border-brand-border bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+        <h3 className="font-serif text-lg text-charcoal">Addresses</h3>
+        <p className="mt-1 text-sm leading-relaxed text-medium-gray">
+          Your home, work, and investment property addresses help the EA with
+          routine tasks like scheduling maintenance, giving directions, and
+          providing context.
+        </p>
+        <div className="mt-4 space-y-5">
+          {/* Home Address */}
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
+              Home Address
+            </label>
+            <input
+              type="text"
+              value={draftHomeAddress}
+              onChange={(e) => setDraftHomeAddress(e.target.value)}
+              placeholder="123 Main St, Denver, CO 80202"
+              className="mt-1 block w-full rounded border border-brand-border bg-white px-3 py-2 text-sm text-charcoal placeholder:text-light-gray focus:border-tan focus:outline-none"
+            />
+          </div>
+
+          {/* Work Address */}
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
+              Work Address
+            </label>
+            <input
+              type="text"
+              value={draftWorkAddress}
+              onChange={(e) => setDraftWorkAddress(e.target.value)}
+              placeholder="456 Office Blvd, Denver, CO 80202"
+              className="mt-1 block w-full rounded border border-brand-border bg-white px-3 py-2 text-sm text-charcoal placeholder:text-light-gray focus:border-tan focus:outline-none"
+            />
+          </div>
+
+          {/* Investment Property Addresses */}
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
+              Investment Property Addresses
+            </label>
+            <div className="mt-2 space-y-2">
+              {draftInvestmentAddresses.map((addr, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={addr}
+                    onChange={(e) => updateInvestmentAddress(i, e.target.value)}
+                    placeholder="456 Investment Ave, Telluride, CO 81435"
+                    className="block w-full rounded border border-brand-border bg-white px-3 py-2 text-sm text-charcoal placeholder:text-light-gray focus:border-tan focus:outline-none"
+                  />
+                  <button
+                    onClick={() => removeInvestmentAddress(i)}
+                    className="flex-shrink-0 rounded border border-brand-border px-2 py-2 text-xs text-medium-gray transition-colors hover:border-red-300 hover:text-red-600"
+                    title="Remove address"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={addInvestmentAddress}
+                className="rounded border border-dashed border-brand-border px-3 py-1.5 text-xs text-medium-gray transition-colors hover:border-tan hover:text-charcoal"
+              >
+                + Add Property
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={saveAddresses}
+              disabled={
+                draftHomeAddress === (features.home_address ?? '') &&
+                draftWorkAddress === (features.work_address ?? '') &&
+                JSON.stringify(draftInvestmentAddresses) ===
+                  JSON.stringify(features.investment_property_addresses ?? [])
+              }
+              className="rounded bg-tan px-4 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Save Addresses
+            </button>
+            {savedField === 'addresses' && (
               <span className="text-xs font-medium text-success">Saved</span>
             )}
           </div>

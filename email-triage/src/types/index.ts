@@ -47,6 +47,9 @@ export interface TeamMember {
   scheduling_link: string | null;
   ea_custom_instructions: string | null;
   sms_phone_number: string | null;
+  home_address: string | null;
+  work_address: string | null;
+  investment_property_addresses: string[];
 }
 
 export interface TriageRun {
@@ -222,12 +225,12 @@ export interface ParsedOverrideRule {
 
 export type TodoPriority = 'low' | 'medium' | 'high';
 export type TodoStatus = 'active' | 'completed';
-export type TodoCategory = 'general' | 'work' | 'personal' | 'errands' | 'follow-up';
+export type TodoCategory = 'work' | 'personal' | 'properties' | 'errands' | 'follow-up';
 
 export const TODO_CATEGORY_OPTIONS: { value: TodoCategory; label: string }[] = [
-  { value: 'general', label: 'General' },
   { value: 'work', label: 'Work' },
   { value: 'personal', label: 'Personal' },
+  { value: 'properties', label: 'Properties' },
   { value: 'errands', label: 'Errands' },
   { value: 'follow-up', label: 'Follow-up' },
 ];
@@ -237,6 +240,9 @@ export const TODO_PRIORITY_OPTIONS: { value: TodoPriority; label: string; color:
   { value: 'medium', label: 'Medium', color: 'text-yellow-600' },
   { value: 'low', label: 'Low', color: 'text-green-600' },
 ];
+
+export type EmailStatus = 'awaiting_reply' | 'replied' | 'draft_ready' | 'scheduled' | 'resolved';
+export type TodoSource = 'manual' | 'email' | 'agent' | 'triage';
 
 export interface Todo {
   id: string;
@@ -252,6 +258,70 @@ export interface Todo {
   slack_reminded_at: string | null;
   ai_priority_reason: string | null;
   completed_at: string | null;
+  recurring_todo_id: string | null;
+  // Email linking
+  email_thread_id: string | null;
+  email_message_id: string | null;
+  email_subject: string | null;
+  email_from: string | null;
+  email_status: EmailStatus | null;
+  source: TodoSource;
+  created_at: string;
+  updated_at: string;
+}
+
+// ─── Email Actions ───
+
+export type EmailActionType =
+  | 'email_sent'
+  | 'email_drafted'
+  | 'reply_received'
+  | 'follow_up_sent'
+  | 'appointment_confirmed'
+  | 'appointment_scheduled'
+  | 'archived'
+  | 'note';
+
+export interface EmailAction {
+  id: string;
+  reminder_id: string | null;
+  team_member_id: string;
+  email_thread_id: string;
+  gmail_message_id: string | null;
+  action_type: EmailActionType;
+  action_summary: string | null;
+  action_details: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ─── Recurring Todos ───
+
+export type RecurrenceType = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export const RECURRENCE_TYPE_OPTIONS: { value: RecurrenceType; label: string }[] = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
+];
+
+export interface RecurringTodo {
+  id: string;
+  team_member_id: string;
+  title: string;
+  description: string | null;
+  notes: string | null;
+  category: TodoCategory;
+  priority: TodoPriority;
+  recurrence_type: RecurrenceType;
+  recurrence_interval: number;
+  recurrence_day_of_week: number | null;
+  recurrence_day_of_month: number | null;
+  recurrence_month: number | null;
+  advance_notice_days: number;
+  next_due_at: string;
+  last_generated_at: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }

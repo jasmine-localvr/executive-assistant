@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface ToolCall {
   name: string;
@@ -515,9 +516,15 @@ export default function ChatPage() {
                 )}
 
                 {/* Message content */}
-                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {msg.content}
-                </div>
+                {msg.role === 'assistant' ? (
+                  <div className="prose prose-sm max-w-none leading-relaxed text-charcoal prose-headings:mt-3 prose-headings:mb-1 prose-headings:text-charcoal prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 prose-a:text-navy prose-strong:text-charcoal prose-code:text-charcoal prose-code:bg-cream prose-code:rounded prose-code:px-1 prose-pre:bg-cream prose-pre:rounded-lg">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {msg.content}
+                  </div>
+                )}
 
                 <div
                   className={`mt-1.5 text-[10px] ${

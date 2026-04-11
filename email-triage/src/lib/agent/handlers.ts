@@ -67,6 +67,18 @@ export async function executeTool(
         return await handleReminderComplete(input, member);
       case 'todo_prioritize':
         return await handleTodoPrioritize(member);
+      case 'email_check_replies':
+        return await handleEmailCheckReplies(input, member);
+      case 'email_log_action':
+        return await handleEmailLogAction(input, member);
+      case 'email_get_history':
+        return await handleEmailGetHistory(input, member);
+      case 'recurring_todo_create':
+        return await handleRecurringTodoCreate(input, member);
+      case 'recurring_todo_list':
+        return await handleRecurringTodoList(input, member);
+      case 'recurring_todo_pause':
+        return await handleRecurringTodoPause(input, member);
       case 'browser_navigate':
         return await handleBrowserNavigate(input, member);
       case 'browser_click':
@@ -731,19 +743,32 @@ async function handleReminderCreate(
   input: Record<string, unknown>,
   member: TeamMember
 ): Promise<ToolResult> {
+  // Build insert payload — include email fields if provided
+  const insertPayload: Record<string, unknown> = {
+    team_member_id: member.id,
+    title: input.title as string,
+    description: (input.description as string) || null,
+    due_at: (input.due_at as string) || null,
+    priority: (input.priority as string) || 'medium',
+    category: (input.category as string) || 'work',
+    notes: (input.notes as string) || null,
+    status: 'active',
+  };
+
+  // Email linking fields
+  if (input.email_thread_id) {
+    insertPayload.email_thread_id = input.email_thread_id;
+    insertPayload.source = 'email';
+  }
+  if (input.email_message_id) insertPayload.email_message_id = input.email_message_id;
+  if (input.email_subject) insertPayload.email_subject = input.email_subject;
+  if (input.email_from) insertPayload.email_from = input.email_from;
+  if (input.email_status) insertPayload.email_status = input.email_status;
+
   const { data, error } = await supabase
     .from('agent_reminders')
-    .insert({
-      team_member_id: member.id,
-      title: input.title as string,
-      description: (input.description as string) || null,
-      due_at: (input.due_at as string) || null,
-      priority: (input.priority as string) || 'medium',
-      category: (input.category as string) || 'general',
-      notes: (input.notes as string) || null,
-      status: 'active',
-    })
-    .select('id, title, description, due_at, priority, category')
+    .insert(insertPayload)
+    .select('id, title, description, due_at, priority, category, email_thread_id, email_status, source')
     .single();
 
   if (error) return { success: false, error: error.message };
@@ -760,7 +785,7 @@ async function handleReminderList(
 
   let query = supabase
     .from('agent_reminders')
-    .select('id, title, description, due_at, priority, category, notes, status, ai_priority_reason, created_at')
+    .select('id, title, description, due_at, priority, category, notes, status, ai_priority_reason, created_at, email_thread_id, email_subject, email_from, email_status, source')
     .eq('team_member_id', member.id)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -836,6 +861,290 @@ async function handleTodoPrioritize(
       instructions: 'Analyze these todos and suggest priority adjustments. For each todo that should change priority, explain why. Present the results to the user clearly.',
     },
   };
+}
+
+// ─── Email-Todo Linking Handlers ───
+
+async function handleEmailCheckReplies(
+  input: Record<string, unknown>,
+  member: TeamMember
+): Promise<ToolResult> {
+  const specificReminderId = input.reminder_id as string | undefined;
+
+  // Find todos with linked email threads that are awaiting reply
+  let query = supabase
+    .from('agent_reminders')
+    .select('id, title, email_thread_id, email_subject, email_from, email_status, created_at')
+    .eq('team_member_id', member.id)
+    .eq('status', 'active')
+    .not('email_thread_id', 'is', null);
+
+  if (specificReminderId) {
+    query = query.eq('id', specificReminderId);
+  } else {
+    query = query.eq('email_status', 'awaiting_reply');
+  }
+
+  const { data: reminders, error } = await query;
+  if (error) return { success: false, error: error.message };
+  if (!reminders || reminders.length === 0) {
+    return { success: true, data: { message: 'No email threads to check.', threads: [] } };
+  }
+
+  // For each linked thread, check Gmail for new messages
+  const auth = await getAuthedClient(member);
+  const gmail = google.gmail({ version: 'v1', auth });
+
+  const results = [];
+  for (const reminder of reminders) {
+    try {
+      const thread = await gmail.users.threads.get({
+        userId: 'me',
+        id: reminder.email_thread_id,
+        format: 'metadata',
+        metadataHeaders: ['From', 'Subject', 'Date'],
+      });
+
+      const messages = thread.data.messages ?? [];
+      const latestMessage = messages[messages.length - 1];
+      const headers = latestMessage?.payload?.headers ?? [];
+      const getHeader = (name: string) =>
+        headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value ?? '';
+
+      // Check if the latest message is from someone other than the user (i.e., a reply)
+      const latestFrom = getHeader('From');
+      const isReply = !latestFrom.toLowerCase().includes(member.email.toLowerCase());
+
+      results.push({
+        reminder_id: reminder.id,
+        todo_title: reminder.title,
+        email_subject: reminder.email_subject || getHeader('Subject'),
+        thread_message_count: messages.length,
+        latest_from: latestFrom,
+        latest_date: getHeader('Date'),
+        latest_snippet: latestMessage?.snippet ?? '',
+        latest_message_id: latestMessage?.id,
+        has_new_reply: isReply,
+      });
+    } catch {
+      results.push({
+        reminder_id: reminder.id,
+        todo_title: reminder.title,
+        email_subject: reminder.email_subject,
+        error: 'Could not fetch thread — it may have been deleted',
+      });
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      checked: results.length,
+      threads: results,
+      threads_with_replies: results.filter((r) => r.has_new_reply).length,
+    },
+  };
+}
+
+async function handleEmailLogAction(
+  input: Record<string, unknown>,
+  member: TeamMember
+): Promise<ToolResult> {
+  const emailThreadId = input.email_thread_id as string;
+  const actionType = input.action_type as string;
+  const actionSummary = input.action_summary as string;
+  const reminderId = (input.reminder_id as string) || null;
+  const gmailMessageId = (input.gmail_message_id as string) || null;
+  const updateEmailStatus = input.update_email_status as string | undefined;
+
+  // Insert the action log
+  const { data, error } = await supabase
+    .from('email_actions')
+    .insert({
+      reminder_id: reminderId,
+      team_member_id: member.id,
+      email_thread_id: emailThreadId,
+      gmail_message_id: gmailMessageId,
+      action_type: actionType,
+      action_summary: actionSummary,
+      action_details: input.action_details || null,
+    })
+    .select('id, action_type, action_summary, created_at')
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  // Optionally update the linked todo's email_status
+  if (updateEmailStatus && reminderId) {
+    await supabase
+      .from('agent_reminders')
+      .update({ email_status: updateEmailStatus, updated_at: new Date().toISOString() })
+      .eq('id', reminderId)
+      .eq('team_member_id', member.id);
+  }
+
+  return { success: true, data };
+}
+
+async function handleEmailGetHistory(
+  input: Record<string, unknown>,
+  member: TeamMember
+): Promise<ToolResult> {
+  const reminderId = input.reminder_id as string | undefined;
+  const emailThreadId = input.email_thread_id as string | undefined;
+
+  if (!reminderId && !emailThreadId) {
+    return { success: false, error: 'Provide either reminder_id or email_thread_id' };
+  }
+
+  let query = supabase
+    .from('email_actions')
+    .select('id, reminder_id, email_thread_id, gmail_message_id, action_type, action_summary, action_details, created_at')
+    .eq('team_member_id', member.id)
+    .order('created_at', { ascending: true });
+
+  if (reminderId) {
+    query = query.eq('reminder_id', reminderId);
+  } else if (emailThreadId) {
+    query = query.eq('email_thread_id', emailThreadId);
+  }
+
+  const { data, error } = await query;
+  if (error) return { success: false, error: error.message };
+
+  // Also fetch the linked todo for context
+  let linkedTodo = null;
+  if (reminderId) {
+    const { data: todo } = await supabase
+      .from('agent_reminders')
+      .select('id, title, email_subject, email_from, email_status, status')
+      .eq('id', reminderId)
+      .single();
+    linkedTodo = todo;
+  }
+
+  return {
+    success: true,
+    data: {
+      linked_todo: linkedTodo,
+      actions: data ?? [],
+      total_actions: (data ?? []).length,
+    },
+  };
+}
+
+// ─── Recurring Todo Handlers ───
+
+async function handleRecurringTodoCreate(
+  input: Record<string, unknown>,
+  member: TeamMember
+): Promise<ToolResult> {
+  const { computeNextDue, formatRecurrenceLabel } = await import('@/lib/recurrence');
+
+  const recurrenceType = input.recurrence_type as string;
+  const recurrenceInterval = (input.recurrence_interval as number) || 1;
+  const dayOfWeek = input.recurrence_day_of_week as number | undefined;
+  const dayOfMonth = input.recurrence_day_of_month as number | undefined;
+  const month = input.recurrence_month as number | undefined;
+
+  const params = {
+    recurrence_type: recurrenceType,
+    recurrence_interval: recurrenceInterval,
+    recurrence_day_of_week: dayOfWeek ?? null,
+    recurrence_day_of_month: dayOfMonth ?? null,
+    recurrence_month: month ?? null,
+  };
+
+  const nextDue = (input.next_due_at as string) || computeNextDue(params, new Date());
+
+  const { data, error } = await supabase
+    .from('recurring_todos')
+    .insert({
+      team_member_id: member.id,
+      title: input.title as string,
+      description: (input.description as string) || null,
+      notes: (input.notes as string) || null,
+      category: (input.category as string) || 'personal',
+      priority: (input.priority as string) || 'medium',
+      recurrence_type: recurrenceType,
+      recurrence_interval: recurrenceInterval,
+      recurrence_day_of_week: dayOfWeek ?? null,
+      recurrence_day_of_month: dayOfMonth ?? null,
+      recurrence_month: month ?? null,
+      advance_notice_days: (input.advance_notice_days as number) ?? 0,
+      next_due_at: nextDue,
+      is_active: true,
+    })
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  const scheduleLabel = formatRecurrenceLabel(params);
+  return {
+    success: true,
+    data: {
+      ...data,
+      schedule_label: scheduleLabel,
+    },
+  };
+}
+
+async function handleRecurringTodoList(
+  input: Record<string, unknown>,
+  member: TeamMember
+): Promise<ToolResult> {
+  const { formatRecurrenceLabel } = await import('@/lib/recurrence');
+  const includePaused = (input.include_paused as boolean) || false;
+
+  let query = supabase
+    .from('recurring_todos')
+    .select('*')
+    .eq('team_member_id', member.id)
+    .order('next_due_at', { ascending: true });
+
+  if (!includePaused) {
+    query = query.eq('is_active', true);
+  }
+
+  const { data, error } = await query;
+  if (error) return { success: false, error: error.message };
+
+  const items = (data ?? []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    category: r.category,
+    priority: r.priority,
+    schedule: formatRecurrenceLabel(r),
+    next_due: r.next_due_at,
+    advance_notice_days: r.advance_notice_days,
+    is_active: r.is_active,
+    notes: r.notes,
+  }));
+
+  return { success: true, data: { recurring_todos: items } };
+}
+
+async function handleRecurringTodoPause(
+  input: Record<string, unknown>,
+  member: TeamMember
+): Promise<ToolResult> {
+  const pause = input.pause as boolean;
+
+  const { data, error } = await supabase
+    .from('recurring_todos')
+    .update({
+      is_active: !pause,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.recurring_todo_id as string)
+    .eq('team_member_id', member.id)
+    .select('id, title, is_active')
+    .single();
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, data };
 }
 
 // ─── Browser Handlers ───
@@ -1045,7 +1354,7 @@ async function handleNoteToSelf(
     .insert({
       team_member_id: member.id,
       content: input.content as string,
-      category: (input.category as string) || 'general',
+      category: (input.category as string) || 'work',
     })
     .select('id, content, category')
     .single();
