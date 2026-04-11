@@ -137,11 +137,16 @@ export async function POST(req: Request) {
 
   // Respond to Twilio immediately, process in background
   after(async () => {
-    await handleSmsMessage(member, body.trim());
+    try {
+      await handleSmsMessage(member, body.trim());
+    } catch (err) {
+      console.error('[SMS] Unhandled error in after():', err instanceof Error ? err.message : String(err));
+    }
   });
 
+  // Also send an immediate TwiML reply as a fallback test
   return new Response(
-    '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+    `<?xml version="1.0" encoding="UTF-8"?><Response><Message>EA received: "${body.trim().slice(0, 40)}"</Message></Response>`,
     { status: 200, headers: { 'Content-Type': 'text/xml' } }
   );
 }
