@@ -20,6 +20,7 @@ interface FeatureState {
   feature_calendar_scheduling: boolean;
   scheduling_link: string;
   ea_custom_instructions: string;
+  sms_phone_number: string;
 }
 
 // ─── Toggle Switch ───
@@ -95,6 +96,7 @@ export default function FeatureSettings() {
   const [draftEmailStyle, setDraftEmailStyle] = useState('');
   const [draftSchedulingLink, setDraftSchedulingLink] = useState('');
   const [draftCustomInstructions, setDraftCustomInstructions] = useState('');
+  const [draftPhoneNumber, setDraftPhoneNumber] = useState('');
   const [analyzingStyle, setAnalyzingStyle] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [draftWeeklySchedule, setDraftWeeklySchedule] = useState<WeeklySchedule>('weekday');
@@ -119,11 +121,13 @@ export default function FeatureSettings() {
           feature_calendar_scheduling: data.feature_calendar_scheduling ?? false,
           scheduling_link: data.scheduling_link ?? '',
           ea_custom_instructions: data.ea_custom_instructions ?? '',
+          sms_phone_number: data.sms_phone_number ?? '',
         };
         setFeatures(state);
         setDraftEmailStyle(state.email_style);
         setDraftSchedulingLink(state.scheduling_link);
         setDraftCustomInstructions(state.ea_custom_instructions);
+        setDraftPhoneNumber(state.sms_phone_number);
         setDraftWeeklySchedule(state.summary_weekly_schedule);
         setDraftDailySummaries(state.summary_daily_summaries);
         setDraftUpdateFrequency(state.summary_update_frequency);
@@ -225,6 +229,11 @@ export default function FeatureSettings() {
   async function saveCustomInstructions() {
     await patchFeature({ ea_custom_instructions: draftCustomInstructions });
     showSaved('ea_custom_instructions');
+  }
+
+  async function savePhoneNumber() {
+    await patchFeature({ sms_phone_number: draftPhoneNumber });
+    showSaved('sms_phone_number');
   }
 
   if (!memberId || loading || !features) {
@@ -456,6 +465,43 @@ export default function FeatureSettings() {
           </div>
         </div>
       </FeatureCard>
+
+      {/* Feature 5: Text Your EA */}
+      <div className="rounded-md border border-brand-border bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.06)]">
+        <h3 className="font-serif text-lg text-charcoal">Text Your EA</h3>
+        <p className="mt-1 text-sm leading-relaxed text-medium-gray">
+          Text your Twilio number to add todos, send emails, check your calendar, and more — all the same things you can do in the chat.
+        </p>
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-[1.5px] text-tan-dark">
+              Your Phone Number
+            </label>
+            <input
+              type="tel"
+              value={draftPhoneNumber}
+              onChange={(e) => setDraftPhoneNumber(e.target.value)}
+              placeholder="+15551234567"
+              className="mt-1 block w-full max-w-md rounded border border-brand-border bg-white px-3 py-2 text-sm text-charcoal placeholder:text-light-gray focus:border-tan focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-light-gray">
+              E.164 format (e.g. +15551234567). This links your phone to your account so the EA knows who&apos;s texting.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={savePhoneNumber}
+              disabled={draftPhoneNumber === (features.sms_phone_number ?? '')}
+              className="rounded bg-tan px-4 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Save Phone Number
+            </button>
+            {savedField === 'sms_phone_number' && (
+              <span className="text-xs font-medium text-success">Saved</span>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

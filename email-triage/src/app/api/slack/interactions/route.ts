@@ -73,6 +73,73 @@ export async function POST(req: Request) {
   if (!action) return new Response('OK', { status: 200 });
 
   const actionId: string = action.action_id ?? '';
+
+  // ── Todo button handlers ──
+  const isTodoComplete = actionId.startsWith('todo_complete_');
+  const isTodoSnooze = actionId.startsWith('todo_snooze_');
+
+  if (isTodoComplete || isTodoSnooze) {
+    const responseUrl: string | undefined = payload.response_url;
+
+    after(async () => {
+      try {
+        if (isTodoComplete) {
+          const todoId = action.value;
+          await supabase
+            .from('agent_reminders')
+            .update({
+              status: 'completed',
+              completed_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', todoId);
+
+          if (responseUrl) {
+            await fetch(responseUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                replace_original: false,
+                text: `✅ Marked as complete!`,
+              }),
+            });
+          }
+        } else {
+          // Snooze
+          const parts = (action.value ?? '').split('|');
+          const todoId = parts[0];
+          const hours = parseInt(parts[1] || '1', 10);
+          const snoozeUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+
+          await supabase
+            .from('agent_reminders')
+            .update({
+              snoozed_until: snoozeUntil,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', todoId);
+
+          if (responseUrl) {
+            const label = hours >= 24 ? `${hours / 24} day` : `${hours} hour${hours === 1 ? '' : 's'}`;
+            await fetch(responseUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                replace_original: false,
+                text: `⏸️ Snoozed for ${label}`,
+              }),
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Todo interaction error:', err);
+      }
+    });
+
+    return new Response('', { status: 200 });
+  }
+
+  // ── Calendar RSVP handlers ──
   const isAccept = actionId.startsWith('calendar_accept_');
   const isDecline = actionId.startsWith('calendar_decline_');
 

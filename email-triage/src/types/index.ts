@@ -46,6 +46,7 @@ export interface TeamMember {
   feature_calendar_scheduling: boolean;
   scheduling_link: string | null;
   ea_custom_instructions: string | null;
+  sms_phone_number: string | null;
 }
 
 export interface TriageRun {
@@ -181,6 +182,22 @@ export interface EaInboxMessage {
   messageIdHeader: string;
 }
 
+// ─── EA Contacts ───
+
+export interface EaContact {
+  id: string;
+  team_member_id: string;
+  name: string;
+  type: string; // 'doctor' | 'vet' | 'dentist' | 'vendor' | etc.
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
+  last_appointment: string | null; // date string
+  created_at: string;
+  updated_at: string;
+}
+
 // ─── Tier Override Rules ───
 
 export interface TierOverrideRule {
@@ -199,6 +216,44 @@ export interface ParsedOverrideRule {
   match_value: string;
   forced_tier: 1 | 2 | 3 | 4;
   description: string;
+}
+
+// ─── Todos ───
+
+export type TodoPriority = 'low' | 'medium' | 'high';
+export type TodoStatus = 'active' | 'completed';
+export type TodoCategory = 'general' | 'work' | 'personal' | 'errands' | 'follow-up';
+
+export const TODO_CATEGORY_OPTIONS: { value: TodoCategory; label: string }[] = [
+  { value: 'general', label: 'General' },
+  { value: 'work', label: 'Work' },
+  { value: 'personal', label: 'Personal' },
+  { value: 'errands', label: 'Errands' },
+  { value: 'follow-up', label: 'Follow-up' },
+];
+
+export const TODO_PRIORITY_OPTIONS: { value: TodoPriority; label: string; color: string }[] = [
+  { value: 'high', label: 'High', color: 'text-red-600' },
+  { value: 'medium', label: 'Medium', color: 'text-yellow-600' },
+  { value: 'low', label: 'Low', color: 'text-green-600' },
+];
+
+export interface Todo {
+  id: string;
+  team_member_id: string;
+  title: string;
+  description: string | null;
+  notes: string | null;
+  category: TodoCategory;
+  priority: TodoPriority;
+  status: TodoStatus;
+  due_at: string | null;
+  snoozed_until: string | null;
+  slack_reminded_at: string | null;
+  ai_priority_reason: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface PipelineRunResult {
