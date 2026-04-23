@@ -162,6 +162,11 @@ export async function runAgent(
     // If no client tool calls, we're done — Claude produced its final answer
     // (server-side tools like web_search are already resolved in the same response)
     if (!hasClientToolUse) {
+      // Persist the final assistant response so conversation history stays complete
+      messages.push({
+        role: 'assistant',
+        content: response.content as Anthropic.ContentBlockParam[],
+      });
       break;
     }
 
