@@ -123,16 +123,50 @@ async function getSlackConversation(
   return { id: newConv?.id ?? '', messages: [] };
 }
 
-/** Keep only the last N message pairs to avoid unbounded context growth. */
+/** Does this user message contain any tool_result blocks? */
+function hasToolResult(msg: Anthropic.MessageParam): boolean {
+  if (msg.role !== 'user' || typeof msg.content === 'string') return false;
+  return msg.content.some((b) => b.type === 'tool_result');
+}
+
+/** Does this assistant message contain any tool_use blocks? */
+function hasToolUse(msg: Anthropic.MessageParam): boolean {
+  if (msg.role !== 'assistant' || typeof msg.content === 'string') return false;
+  return msg.content.some((b) => b.type === 'tool_use');
+}
+
+/**
+ * Keep only the last N message pairs to avoid unbounded context growth.
+ * Ensures we never split a tool_use / tool_result pair — a leading user
+ * message with tool_result blocks but no preceding assistant tool_use will
+ * cause Anthropic's API to 400 with "unexpected tool_use_id".
+ */
 function trimHistory(
   messages: Anthropic.MessageParam[],
   maxPairs: number = 20
 ): Anthropic.MessageParam[] {
-  // Each user+assistant exchange is roughly 2 entries, but tool rounds add more.
-  // Keep the last maxPairs * 2 entries.
   const maxEntries = maxPairs * 2;
-  if (messages.length <= maxEntries) return messages;
-  return messages.slice(-maxEntries);
+  let start = messages.length <= maxEntries ? 0 : messages.length - maxEntries;
+
+  // Advance past any orphaned tool_result messages (and any assistant messages
+  // that only exist to satisfy them) until we land on a clean boundary.
+  while (start < messages.length) {
+    const first = messages[start];
+    if (hasToolResult(first)) {
+      start++;
+      continue;
+    }
+    // If the first surviving message is an assistant message with tool_use,
+    // its matching tool_result would be next — but we're fine starting there
+    // only if the message also isn't orphaned. Safer to skip to the next user.
+    if (hasToolUse(first)) {
+      start++;
+      continue;
+    }
+    break;
+  }
+
+  return messages.slice(start);
 }
 
 /** Run the agent and send its response back to the Slack DM. */
@@ -190,16 +224,21 @@ export async function POST(req: Request) {
   // ── App Home tab ──
   if (body.event?.type === 'app_home_opened') {
     const homeUserId: string = body.event.user;
+    console.log('[Home] app_home_opened event received for user:', homeUserId);
     const member = await getTeamMemberBySlackId(homeUserId);
-    if (member) {
-      after(async () => {
-        try {
-          await publishHomeTab(homeUserId, member.id);
-        } catch (err) {
-          console.error('[Home] Failed to publish Home tab:', err);
-        }
-      });
+    if (!member) {
+      console.warn('[Home] No team member found for Slack user:', homeUserId);
+      return new Response('OK', { status: 200 });
     }
+    console.log('[Home] Publishing Home tab for member:', member.id);
+    after(async () => {
+      try {
+        await publishHomeTab(homeUserId, member.id);
+        console.log('[Home] Home tab published successfully');
+      } catch (err) {
+        console.error('[Home] Failed to publish Home tab:', err);
+      }
+    });
     return new Response('OK', { status: 200 });
   }
 
@@ -243,6 +282,18 @@ export async function POST(req: Request) {
 
   if (trimmed.startsWith('delete rule')) {
     await handleDeleteRule(channelId, member.id, messageText);
+    return new Response('OK', { status: 200 });
+  }
+
+  if (trimmed === 'refresh home') {
+    try {
+      await publishHomeTab(userSlackId, member.id);
+      await sendSlackMessage(channelId, '✅ Home tab refreshed!');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[Home] Manual refresh failed:', err);
+      await sendSlackMessage(channelId, `❌ Home tab error: ${msg}`);
+    }
     return new Response('OK', { status: 200 });
   }
 
