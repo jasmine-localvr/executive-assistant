@@ -116,6 +116,7 @@ export async function runTriagePipeline(
     let tier2Count = 0;
     let tier3Count = 0;
     let tier4Count = 0;
+    let classifyErrorCount = 0;
 
     // Keep original email data in memory for draft generation
     const emailMap = new Map<string, GmailMessage>();
@@ -189,17 +190,29 @@ export async function runTriagePipeline(
 
         await log('success', 'classify', `Tier ${classification.tier}: ${classification.label}`);
       } catch (classifyError) {
+        classifyErrorCount++;
         const msg = classifyError instanceof Error ? classifyError.message : String(classifyError);
         await log('error', 'classify', `Failed to classify "${email.subject?.slice(0, 40)}": ${msg}`);
       }
     }
+
+    // If we had emails to classify but every single one errored, the run is
+    // broken (e.g. a retired/invalid model, bad API key) — fail loudly instead
+    // of reporting a "completed" run with zero results.
+    if (newEmails.length > 0 && classifyErrorCount === newEmails.length) {
+      throw new Error(
+        `All ${newEmails.length} classifications failed — aborting run (check the Claude model ID and API key)`
+      );
+    }
+
+    const emailsClassified = tier1Count + tier2Count + tier3Count + tier4Count;
 
     // Update run counts
     await supabase
       .from('triage_runs')
       .update({
         emails_fetched: emails.length,
-        emails_classified: newEmails.length,
+        emails_classified: emailsClassified,
         tier1_count: tier1Count,
         tier2_count: tier2Count,
         tier3_count: tier3Count,

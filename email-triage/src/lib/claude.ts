@@ -89,9 +89,8 @@ export async function analyzeEmailStyle(
     .join('\n\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 500,
-    temperature: 0.3,
     system: STYLE_ANALYSIS_PROMPT,
     messages: [{ role: 'user', content: emailTexts }],
   });
@@ -114,9 +113,8 @@ Date: ${email.receivedAt}
 ${email.body}`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 1500,
-    temperature: 0,
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: userMessage }],
   });
@@ -199,9 +197,8 @@ Suggested action: ${classification.suggested_action ?? 'Reply appropriately'}
 Rough draft idea: ${classification.draft_reply ?? 'No rough draft provided'}`;
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-4-6',
     max_tokens: 2000,
-    temperature: 0.3,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
