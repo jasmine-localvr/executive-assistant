@@ -6,7 +6,7 @@ import {
   deactivateOverrideRule,
 } from './override-rules';
 import { supabase } from './supabase';
-import { runTriagePipeline } from './pipeline';
+import { runTriagePipeline, hasActiveRun } from './pipeline';
 import { fetchTodayEvents } from './calendar';
 import { sendCalendarSummary } from './slack';
 import type { ParsedOverrideRule, TierOverrideRule, TeamMember } from '@/types';
@@ -195,15 +195,9 @@ export async function handleTriageNow(
   channelId: string,
   memberId: string
 ): Promise<void> {
-  // Prevent overlapping runs
-  const { data: running } = await supabase
-    .from('triage_runs')
-    .select('id')
-    .eq('team_member_id', memberId)
-    .eq('status', 'running')
-    .limit(1);
-
-  if (running && running.length > 0) {
+  // Prevent overlapping runs — but ignore orphaned runs stuck in 'running'
+  // (e.g. a timed-out pipeline), which would otherwise block triage forever.
+  if (await hasActiveRun(memberId)) {
     await sendSlackMessage(
       channelId,
       'A triage is already running for your inbox. Hang tight — you\'ll get a summary when it\'s done.'
@@ -212,8 +206,10 @@ export async function handleTriageNow(
   }
 
   try {
+    // Keep within the function's maxDuration — PHASE 3's per-email Gmail +
+    // Claude draft calls make large batches time out and strand the run.
     const result = await runTriagePipeline(memberId, {
-      emailCount: 50,
+      emailCount: 30,
       skipDigest: false,
     });
 
