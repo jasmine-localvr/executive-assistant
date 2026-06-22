@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
-import { runTriagePipeline } from '@/lib/pipeline';
+import { runTriagePipeline, hasActiveRun } from '@/lib/pipeline';
+
+// The pipeline classifies many emails and runs per-email Gmail + Claude calls;
+// the default function duration is too short. A timeout here strands the run
+// in 'running' (see hasActiveRun).
+export const maxDuration = 300;
 
 /**
  * Gmail Pub/Sub push notification webhook.
@@ -56,15 +61,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Inbox management disabled for user' });
   }
 
-  // Check if there's already a running pipeline for this member (prevent overlap)
-  const { data: running } = await supabase
-    .from('triage_runs')
-    .select('id')
-    .eq('team_member_id', member.id)
-    .eq('status', 'running')
-    .limit(1);
-
-  if (running && running.length > 0) {
+  // Skip if a pipeline is genuinely still running for this member. Orphaned
+  // runs (timed-out, stuck in 'running') are ignored so they can't block triage.
+  if (await hasActiveRun(member.id)) {
     return NextResponse.json({ message: 'Pipeline already running' });
   }
 

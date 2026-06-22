@@ -20,6 +20,25 @@ interface PipelineOptions {
   cleanupMode?: boolean;
 }
 
+// A run is only "active" if it started recently. The pipeline marks a row
+// 'running' up front and only clears it at the very end, so a serverless
+// timeout mid-run leaves it stuck in 'running' forever. Overlap guards must
+// ignore such orphans, or one stranded run blocks all future triage. This
+// window must comfortably exceed the routes' maxDuration (300s).
+export const STALE_RUN_MS = 15 * 60 * 1000;
+
+export async function hasActiveRun(teamMemberId: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - STALE_RUN_MS).toISOString();
+  const { data } = await supabase
+    .from('triage_runs')
+    .select('id')
+    .eq('team_member_id', teamMemberId)
+    .eq('status', 'running')
+    .gt('started_at', cutoff)
+    .limit(1);
+  return !!data && data.length > 0;
+}
+
 export async function runTriagePipeline(
   teamMemberId: string,
   options: PipelineOptions = {}
